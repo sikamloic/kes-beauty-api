@@ -56,7 +56,9 @@ export class BusinessTypesController {
     if (!acceptLanguage) return 'fr';
 
     // Parse primary language
-    const primary = acceptLanguage.split(',')[0].split('-')[0].toLowerCase();
+    const firstPart = acceptLanguage.split(',')[0];
+    const langPart = firstPart?.split('-')[0];
+    const primary = langPart?.toLowerCase() ?? 'fr';
 
     // Langues supportées
     const supportedLocales = ['fr', 'en'];

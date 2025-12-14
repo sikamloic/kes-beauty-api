@@ -6,12 +6,28 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import {
   CreateAppointmentDto,
   UpdateAppointmentStatusDto,
   FilterAppointmentsDto,
   AppointmentStatus,
 } from '../dto';
+
+// Types pour les résultats de requêtes avec includes
+type AppointmentWithProvider = Prisma.AppointmentGetPayload<{
+  include: {
+    service: { select: { id: true; name: true; price: true } };
+    provider: { select: { id: true; businessName: true; city: true; neighborhood: true } };
+  };
+}>;
+
+type AppointmentWithClient = Prisma.AppointmentGetPayload<{
+  include: {
+    service: { select: { id: true; name: true; price: true } };
+    client: { select: { id: true; phone: true; email: true } };
+  };
+}>;
 
 @Injectable()
 export class AppointmentsService {
@@ -174,7 +190,7 @@ export class AppointmentsService {
     ]);
 
     return {
-      data: appointments.map((apt) => ({
+      data: (appointments as AppointmentWithProvider[]).map((apt) => ({
         id: apt.id,
         scheduledAt: apt.scheduledAt,
         status: apt.status,
@@ -247,7 +263,7 @@ export class AppointmentsService {
     ]);
 
     return {
-      data: appointments.map((apt) => ({
+      data: (appointments as AppointmentWithClient[]).map((apt) => ({
         id: apt.id,
         scheduledAt: apt.scheduledAt,
         status: apt.status,
