@@ -1,0 +1,49 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "declaration": true,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "ES2023",
+    "sourceMap": true,
+    "outDir": "./dist",
+    "baseUrl": "./",
+    "incremental": true,
+    "skipLibCheck": true,
+    
+    /* Strict Type-Checking Options */
+    "strict": true,                           // Active tous les checks stricts
+    "noImplicitAny": true,                    // Interdit 'any' implicite
+    "strictNullChecks": true,                 // Vérifie null/undefined
+    "strictFunctionTypes": true,              // Vérifie types de fonctions
+    "strictBindCallApply": true,              // Vérifie bind/call/apply
+    "strictPropertyInitialization": true,     // Vérifie init propriétés
+    "noImplicitThis": true,                   // Interdit 'this' implicite
+    "alwaysStrict": true,                     // Force 'use strict'
+    
+    /* Additional Checks */
+    "noUnusedLocals": true,                   // Détecte variables non utilisées
+    "noUnusedParameters": true,               // Détecte paramètres non utilisés
+    "noImplicitReturns": true,                // Force return explicite
+    "noFallthroughCasesInSwitch": true,       // Détecte fallthrough dans switch
+    "noUncheckedIndexedAccess": true,         // Sécurise accès array/object
+    
+    /* Module Resolution */
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    
+    /* Advanced Options */
+    "paths": {
+      "@/*": ["src/*"],
+      "@common/*": ["src/common/*"],
+      "@modules/*": ["src/modules/*"],
+      "@config/*": ["src/config/*"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "test"]
+}
