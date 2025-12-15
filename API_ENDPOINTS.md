@@ -641,7 +641,7 @@ Authorization: Bearer <accessToken>
 
 **Endpoint:** `GET /providers/services`
 
-**Description:** Liste des services du provider connecté.
+**Description:** Liste des services du provider connecté avec pagination.
 
 **Auth Required:** ✅ Oui (JWT Bearer + Role: provider)
 
@@ -651,53 +651,65 @@ Authorization: Bearer <accessToken>
 ```
 
 **Query Parameters:**
-- `includeInactive` (optionnel): `true` | `false` - Inclure services inactifs (défaut: false)
+| Paramètre | Type | Obligatoire | Description |
+|-----------|------|-------------|-------------|
+| `includeInactive` | boolean | Non | Inclure les services inactifs (défaut: false) |
+| `page` | number | Non | Numéro de page (défaut: 1) |
+| `limit` | number | Non | Nombre par page (défaut: 20, max: 100) |
 
 **Exemples:**
 ```
 GET /providers/services
 GET /providers/services?includeInactive=true
+GET /providers/services?page=2&limit=10
 ```
 
 **Response Success (200):**
 ```json
 {
   "success": true,
-  "data": [
-    {
-      "id": 1,
-      "name": "Tresses Box Braids",
-      "description": "Tresses africaines traditionnelles, durée 3-4 heures",
-      "price": "15000",
-      "duration": 180,
-      "isActive": true,
-      "category": {
-        "id": 6,
-        "code": "coiffure_afro",
-        "name": "Cheveux Afro",
-        "icon": "scissors"
+  "data": {
+    "services": [
+      {
+        "id": 1,
+        "name": "Tresses Box Braids",
+        "description": "Tresses africaines traditionnelles, durée 3-4 heures",
+        "price": "15000",
+        "duration": 180,
+        "isActive": true,
+        "category": {
+          "id": 6,
+          "code": "coiffure_afro",
+          "name": "Cheveux Afro",
+          "icon": "scissors"
+        },
+        "createdAt": "2024-11-15T10:00:00Z",
+        "updatedAt": "2024-12-01T14:00:00Z"
       },
-      "createdAt": "2024-11-15T10:00:00Z",
-      "updatedAt": "2024-12-01T14:00:00Z"
-    },
-    {
-      "id": 2,
-      "name": "Vanilles",
-      "description": "Coiffure vanilles classiques",
-      "price": "8000",
-      "duration": 120,
-      "isActive": true,
-      "category": {
-        "id": 6,
-        "code": "coiffure_afro",
-        "name": "Cheveux Afro",
-        "icon": "scissors"
-      },
-      "createdAt": "2024-11-15T10:30:00Z",
-      "updatedAt": "2024-11-15T10:30:00Z"
+      {
+        "id": 2,
+        "name": "Vanilles",
+        "description": "Coiffure vanilles classiques",
+        "price": "8000",
+        "duration": 120,
+        "isActive": true,
+        "category": {
+          "id": 6,
+          "code": "coiffure_afro",
+          "name": "Cheveux Afro",
+          "icon": "scissors"
+        },
+        "createdAt": "2024-11-15T10:30:00Z",
+        "updatedAt": "2024-11-15T10:30:00Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 20,
+      "total": 2,
+      "totalPages": 1
     }
-  ],
-  "total": 2
+  }
 }
 ```
 
@@ -1021,6 +1033,99 @@ Accept-Language: fr    // Langue souhaitée (fr, en). Défaut: fr
 - Seules les catégories actives sont retournées
 - **Support multilingue:** Utiliser le header `Accept-Language` (fr, en)
 - Utilisé lors de l'inscription provider et pour la recherche client
+
+---
+
+### 7. Popular Services
+
+**Endpoint:** `GET /providers/services/popular`
+
+**Description:** Récupère les services les plus réservés avec filtres optionnels. Basé sur le nombre de rendez-vous (completed, confirmed, in_progress). **Endpoint public** - utilisé pour la page d'accueil et la découverte.
+
+**Auth Required:** ❌ Non (endpoint public)
+
+**Headers (optionnels):**
+```
+Accept-Language: fr    // Langue souhaitée (fr, en). Défaut: fr
+```
+
+**Query Parameters:**
+| Paramètre | Type | Obligatoire | Description |
+|-----------|------|-------------|-------------|
+| `limit` | number | Non | Nombre de services à retourner (défaut: 10, max: 50) |
+| `categoryId` | number | Non | Filtrer par ID de catégorie |
+| `city` | string | Non | Filtrer par ville (recherche partielle) |
+| `minPrice` | number | Non | Prix minimum en FCFA |
+| `maxPrice` | number | Non | Prix maximum en FCFA |
+| `maxDuration` | number | Non | Durée maximum en minutes |
+
+**Exemples:**
+```
+GET /providers/services/popular
+GET /providers/services/popular?limit=5
+GET /providers/services/popular?city=Yaoundé&limit=10
+GET /providers/services/popular?categoryId=1&maxPrice=10000
+GET /providers/services/popular?minPrice=5000&maxDuration=60
+```
+
+**Response Success (200):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "name": "Tresses Box Braids",
+      "description": "Tresses africaines traditionnelles, durée 3-4 heures",
+      "price": "15000",
+      "duration": 180,
+      "bookingsCount": 45,
+      "category": {
+        "id": 6,
+        "code": "coiffure_afro",
+        "name": "Cheveux Afro",
+        "icon": "scissors"
+      },
+      "provider": {
+        "id": 1,
+        "businessName": "Salon Beauté Excellence",
+        "location": "Bastos, Yaoundé",
+        "rating": "4.50",
+        "reviewsCount": 12
+      }
+    },
+    {
+      "id": 5,
+      "name": "Manucure Gel",
+      "description": "Pose de vernis gel longue durée",
+      "price": "8000",
+      "duration": 60,
+      "bookingsCount": 32,
+      "category": {
+        "id": 3,
+        "code": "manucure_pedicure",
+        "name": "Manucure & Pédicure",
+        "icon": "hand"
+      },
+      "provider": {
+        "id": 3,
+        "businessName": "Nails Paradise",
+        "location": "Bonapriso, Douala",
+        "rating": "4.80",
+        "reviewsCount": 28
+      }
+    }
+  ]
+}
+```
+
+**Notes:**
+- Endpoint public accessible sans authentification
+- Trié par nombre de réservations (décroissant)
+- Seuls les services actifs de providers actifs sont retournés
+- `bookingsCount` représente le nombre de rendez-vous réussis
+- Le filtre `city` effectue une recherche partielle (contient)
+- **Support multilingue:** Utiliser le header `Accept-Language` (fr, en)
 
 ---
 
@@ -1929,11 +2034,11 @@ Accept-Language: fr    // Langue souhaitée (fr, en). Défaut: fr
 |--------|-----------|---------------|
 | **Auth** | 7 | 2/7 |
 | **Provider Profile** | 3 | 2/3 |
-| **Provider Services** | 6 | 5/6 |
+| **Provider Services** | 7 | 6/7 |
 | **Provider Specialties** | 5 | 5/5 |
 | **Provider Availability** | 7 | 7/7 |
 | **Business Types** | 1 | 0/1 |
-| **TOTAL** | **29** | **21/29** |
+| **TOTAL** | **30** | **22/30** |
 
 ## Codes d'Erreur Communs
 

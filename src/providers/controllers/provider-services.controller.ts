@@ -6,12 +6,13 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   ParseIntPipe,
   Req,
   UseGuards,
   Headers,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import { ProviderServicesService } from '../services/provider-services.service';
 import { CreateServiceDto, UpdateServiceDto } from '../dto';
 import { JwtAuthGuard, Roles, RolesGuard, Public } from '../../common';
@@ -37,11 +38,94 @@ export class ProviderServicesController {
   @Get()
   @ApiOperation({
     summary: 'Liste des services',
-    description: 'Récupère tous les services du provider authentifié.',
+    description: 'Récupère tous les services du provider authentifié avec pagination.',
   })
-  async findAll(@Req() request: any) {
+  @ApiQuery({ name: 'includeInactive', required: false, type: Boolean, description: 'Inclure les services inactifs (défaut: false)' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Numéro de page (défaut: 1)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Nombre par page (défaut: 20, max: 100)' })
+  async findAll(
+    @Req() request: { user: { providerId: number } },
+    @Query('includeInactive') includeInactive?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
     const providerId = request.user.providerId;
-    return this.providerServicesService.findAllByProvider(providerId);
+    const parsedPage = Math.max(parseInt(page || '1', 10) || 1, 1);
+    const parsedLimit = Math.min(Math.max(parseInt(limit || '20', 10) || 20, 1), 100);
+    const includeInactiveFlag = includeInactive === 'true';
+
+    return this.providerServicesService.findAllByProvider(
+      providerId,
+      includeInactiveFlag,
+      parsedPage,
+      parsedLimit,
+    );
+  }
+
+  /**
+   * GET /providers/services/categories/list
+   * Liste des catégories disponibles (endpoint public)
+   */
+  @Public()
+  @Get('categories/list')
+  @ApiOperation({
+    summary: 'Liste des catégories',
+    description: 'Récupère toutes les catégories de services disponibles avec traductions. Endpoint public, pas d\'authentification requise.',
+  })
+  @ApiHeader({
+    name: 'Accept-Language',
+    required: false,
+    description: 'Langue souhaitée (fr, en). Défaut: fr',
+    example: 'fr',
+  })
+  async getCategories(@Headers('accept-language') acceptLanguage?: string) {
+    const locale = this.parseLocale(acceptLanguage);
+    return this.providerServicesService.getCategories(locale);
+  }
+
+  /**
+   * GET /providers/services/popular
+   * Services les plus populaires (endpoint public)
+   */
+  @Public()
+  @Get('popular')
+  @ApiOperation({
+    summary: 'Services populaires',
+    description: 'Récupère les services les plus réservés avec filtres optionnels. Endpoint public.',
+  })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Nombre de services (défaut: 10, max: 50)', example: 10 })
+  @ApiQuery({ name: 'categoryId', required: false, type: Number, description: 'Filtrer par catégorie', example: 1 })
+  @ApiQuery({ name: 'city', required: false, type: String, description: 'Filtrer par ville', example: 'Yaoundé' })
+  @ApiQuery({ name: 'minPrice', required: false, type: Number, description: 'Prix minimum (FCFA)', example: 1000 })
+  @ApiQuery({ name: 'maxPrice', required: false, type: Number, description: 'Prix maximum (FCFA)', example: 50000 })
+  @ApiQuery({ name: 'maxDuration', required: false, type: Number, description: 'Durée maximum (minutes)', example: 120 })
+  @ApiHeader({
+    name: 'Accept-Language',
+    required: false,
+    description: 'Langue souhaitée (fr, en). Défaut: fr',
+    example: 'fr',
+  })
+  async getPopularServices(
+    @Query('limit') limit?: string,
+    @Query('categoryId') categoryId?: string,
+    @Query('city') city?: string,
+    @Query('minPrice') minPrice?: string,
+    @Query('maxPrice') maxPrice?: string,
+    @Query('maxDuration') maxDuration?: string,
+    @Headers('accept-language') acceptLanguage?: string,
+  ) {
+    const locale = this.parseLocale(acceptLanguage);
+    const parsedLimit = Math.min(Math.max(parseInt(limit || '10', 10) || 10, 1), 50);
+    
+    const filters = {
+      categoryId: categoryId ? parseInt(categoryId, 10) : undefined,
+      city: city || undefined,
+      minPrice: minPrice ? parseInt(minPrice, 10) : undefined,
+      maxPrice: maxPrice ? parseInt(maxPrice, 10) : undefined,
+      maxDuration: maxDuration ? parseInt(maxDuration, 10) : undefined,
+    };
+
+    return this.providerServicesService.getPopularServices(parsedLimit, locale, filters);
   }
 
   /**
@@ -108,27 +192,6 @@ export class ProviderServicesController {
   ) {
     const providerId = request.user.providerId;
     return this.providerServicesService.remove(id, providerId);
-  }
-
-  /**
-   * GET /providers/services/categories/list
-   * Liste des catégories disponibles (endpoint public)
-   */
-  @Public()
-  @Get('categories/list')
-  @ApiOperation({
-    summary: 'Liste des catégories',
-    description: 'Récupère toutes les catégories de services disponibles avec traductions. Endpoint public, pas d\'authentification requise.',
-  })
-  @ApiHeader({
-    name: 'Accept-Language',
-    required: false,
-    description: 'Langue souhaitée (fr, en). Défaut: fr',
-    example: 'fr',
-  })
-  async getCategories(@Headers('accept-language') acceptLanguage?: string) {
-    const locale = this.parseLocale(acceptLanguage);
-    return this.providerServicesService.getCategories(locale);
   }
 
   /**
