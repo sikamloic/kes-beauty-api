@@ -11,18 +11,14 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { ProviderAvailabilityService } from '../services/provider-availability.service';
-import {
-  SetWeeklyAvailabilityDto,
-  CreateAvailabilityExceptionDto,
-  UpdateAvailabilityExceptionDto,
-} from '../dto';
+import { CreateAvailabilityDto, UpdateAvailabilityDto } from '../dto';
 import { JwtAuthGuard, Roles, RolesGuard } from '../../common';
 
 /**
  * Contrôleur Disponibilités Provider
- * Gestion des horaires et exceptions
+ * Gestion flexible des créneaux par date
  */
 @ApiTags('Provider Availability')
 @Controller('providers/availability')
@@ -35,128 +31,97 @@ export class ProviderAvailabilityController {
   ) {}
 
   /**
-   * POST /providers/availability/weekly
-   * Définir les disponibilités hebdomadaires
+   * POST /providers/availability
+   * Créer un créneau de disponibilité
    */
-  @Post('weekly')
+  @Post()
   @ApiOperation({
-    summary: 'Définir disponibilités hebdomadaires',
+    summary: 'Créer un créneau de disponibilité',
     description:
-      'Définit les horaires réguliers de la semaine. Remplace toutes les disponibilités existantes.',
+      'Crée un créneau pour une date précise. Plusieurs créneaux possibles par date (sans chevauchement).',
   })
-  async setWeeklyAvailability(
-    @Req() request: any,
-    @Body() dto: SetWeeklyAvailabilityDto,
-  ) {
+  async create(@Req() request: any, @Body() dto: CreateAvailabilityDto) {
     const providerId = request.user.providerId;
-    return this.availabilityService.setWeeklyAvailability(providerId, dto);
+    return this.availabilityService.create(providerId, dto);
   }
 
   /**
-   * GET /providers/availability/weekly
-   * Récupérer les disponibilités hebdomadaires
+   * GET /providers/availability
+   * Liste des disponibilités
    */
-  @Get('weekly')
+  @Get()
   @ApiOperation({
-    summary: 'Récupérer disponibilités hebdomadaires',
-    description: 'Récupère les horaires réguliers de la semaine.',
+    summary: 'Liste des disponibilités',
+    description: 'Récupère tous les créneaux, avec filtrage optionnel par période.',
   })
-  async getWeeklyAvailability(@Req() request: any) {
-    const providerId = request.user.providerId;
-    return this.availabilityService.getWeeklyAvailability(providerId);
-  }
-
-  /**
-   * PUT /providers/availability/weekly/day/:dayOfWeek/toggle
-   * Activer/désactiver un jour
-   */
-  @Put('weekly/day/:dayOfWeek/toggle')
-  @ApiOperation({
-    summary: 'Activer/désactiver un jour',
-    description: 'Active ou désactive tous les créneaux d\'un jour spécifique.',
-  })
-  async toggleDay(
-    @Req() request: any,
-    @Param('dayOfWeek', ParseIntPipe) dayOfWeek: number,
-    @Body('isActive') isActive: boolean,
-  ) {
-    const providerId = request.user.providerId;
-    return this.availabilityService.toggleDay(providerId, dayOfWeek, isActive);
-  }
-
-  /**
-   * POST /providers/availability/exceptions
-   * Créer une exception
-   */
-  @Post('exceptions')
-  @ApiOperation({
-    summary: 'Créer une exception',
-    description:
-      'Crée une exception aux horaires réguliers (congé, horaires spéciaux, etc.).',
-  })
-  async createException(
-    @Req() request: any,
-    @Body() dto: CreateAvailabilityExceptionDto,
-  ) {
-    const providerId = request.user.providerId;
-    return this.availabilityService.createException(providerId, dto);
-  }
-
-  /**
-   * GET /providers/availability/exceptions
-   * Liste des exceptions
-   */
-  @Get('exceptions')
-  @ApiOperation({
-    summary: 'Liste des exceptions',
-    description:
-      'Récupère toutes les exceptions aux horaires réguliers, avec filtrage optionnel par période.',
-  })
-  async getExceptions(
+  @ApiQuery({ name: 'startDate', required: false, description: 'Date début (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'endDate', required: false, description: 'Date fin (YYYY-MM-DD)' })
+  async findAll(
     @Req() request: any,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
     const providerId = request.user.providerId;
-    return this.availabilityService.getExceptions(
-      providerId,
-      startDate,
-      endDate,
-    );
+    return this.availabilityService.findAll(providerId, startDate, endDate);
   }
 
   /**
-   * PUT /providers/availability/exceptions/:id
-   * Mettre à jour une exception
+   * GET /providers/availability/:id
+   * Récupérer une disponibilité
    */
-  @Put('exceptions/:id')
+  @Get(':id')
   @ApiOperation({
-    summary: 'Mettre à jour une exception',
-    description: 'Modifie une exception existante.',
+    summary: 'Récupérer une disponibilité',
+    description: 'Récupère un créneau par son ID.',
   })
-  async updateException(
-    @Req() request: any,
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateAvailabilityExceptionDto,
-  ) {
+  async findOne(@Req() request: any, @Param('id', ParseIntPipe) id: number) {
     const providerId = request.user.providerId;
-    return this.availabilityService.updateException(id, providerId, dto);
+    return this.availabilityService.findOne(id, providerId);
   }
 
   /**
-   * DELETE /providers/availability/exceptions/:id
-   * Supprimer une exception
+   * PUT /providers/availability/:id
+   * Mettre à jour une disponibilité
    */
-  @Delete('exceptions/:id')
+  @Put(':id')
   @ApiOperation({
-    summary: 'Supprimer une exception',
-    description: 'Supprime une exception aux horaires réguliers.',
+    summary: 'Mettre à jour une disponibilité',
+    description: 'Modifie un créneau existant.',
   })
-  async deleteException(
+  async update(
     @Req() request: any,
     @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateAvailabilityDto,
   ) {
     const providerId = request.user.providerId;
-    return this.availabilityService.deleteException(id, providerId);
+    return this.availabilityService.update(id, providerId, dto);
+  }
+
+  /**
+   * DELETE /providers/availability/:id
+   * Supprimer une disponibilité
+   */
+  @Delete(':id')
+  @ApiOperation({
+    summary: 'Supprimer une disponibilité',
+    description: 'Supprime un créneau.',
+  })
+  async delete(@Req() request: any, @Param('id', ParseIntPipe) id: number) {
+    const providerId = request.user.providerId;
+    return this.availabilityService.delete(id, providerId);
+  }
+
+  /**
+   * DELETE /providers/availability/date/:date
+   * Supprimer toutes les disponibilités d'une date
+   */
+  @Delete('date/:date')
+  @ApiOperation({
+    summary: 'Supprimer les disponibilités d\'une date',
+    description: 'Supprime tous les créneaux d\'une date précise.',
+  })
+  async deleteByDate(@Req() request: any, @Param('date') date: string) {
+    const providerId = request.user.providerId;
+    return this.availabilityService.deleteByDate(providerId, date);
   }
 }

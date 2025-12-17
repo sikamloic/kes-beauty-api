@@ -69,50 +69,72 @@ export class AppointmentsService {
       );
     }
 
-    // 3. Vérifier disponibilité du créneau
-    const existingAppointment = await this.prisma.appointment.findFirst({
-      where: {
-        providerId: service.provider.id,
-        scheduledAt,
-        status: {
-          notIn: ['cancelled', 'no_show'],
-        },
-      },
-    });
+    // 3. Vérifier disponibilité et créer dans une transaction (évite race conditions)
+    const endTime = new Date(scheduledAt.getTime() + service.duration * 60000);
 
-    if (existingAppointment) {
-      throw new ConflictException('Ce créneau est déjà réservé');
-    }
-
-    // 4. Créer le rendez-vous
-    const appointment = await this.prisma.appointment.create({
-      data: {
-        clientId,
-        providerId: service.provider.id,
-        serviceId: service.id,
-        scheduledAt,
-        durationMinutes: service.duration,
-        priceFcfa: Math.round(Number(service.price)),
-        status: 'pending',
-      },
-      include: {
-        service: {
-          select: {
-            id: true,
-            name: true,
-            price: true,
-            duration: true,
+    const appointment = await this.prisma.$transaction(async (tx) => {
+      // Chercher les RDV qui chevauchent le créneau demandé
+      const overlappingAppointments = await tx.appointment.findMany({
+        where: {
+          providerId: service.provider.id,
+          status: {
+            notIn: ['cancelled', 'no_show'],
+          },
+          scheduledAt: {
+            gte: new Date(scheduledAt.getTime() - 480 * 60000), // Max 8h avant
+            lt: endTime,
           },
         },
-        provider: {
-          select: {
-            id: true,
-            businessName: true,
-            city: true,
-            neighborhood: true,
+      });
+
+      // Vérification précise du chevauchement
+      for (const existing of overlappingAppointments) {
+        const existingEnd = new Date(
+          existing.scheduledAt.getTime() + existing.durationMinutes * 60000,
+        );
+
+        const hasOverlap =
+          (scheduledAt >= existing.scheduledAt && scheduledAt < existingEnd) ||
+          (endTime > existing.scheduledAt && endTime <= existingEnd) ||
+          (scheduledAt <= existing.scheduledAt && endTime >= existingEnd);
+
+        if (hasOverlap) {
+          throw new ConflictException(
+            `Ce créneau chevauche un rendez-vous existant (${existing.scheduledAt.toISOString()} - ${existingEnd.toISOString()})`,
+          );
+        }
+      }
+
+      // Créer le rendez-vous
+      return tx.appointment.create({
+        data: {
+          clientId,
+          providerId: service.provider.id,
+          serviceId: service.id,
+          scheduledAt,
+          durationMinutes: service.duration,
+          priceFcfa: Math.round(Number(service.price)),
+          status: 'pending',
+        },
+        include: {
+          service: {
+            select: {
+              id: true,
+              name: true,
+              price: true,
+              duration: true,
+            },
+          },
+          provider: {
+            select: {
+              id: true,
+              businessName: true,
+              city: true,
+              neighborhood: true,
+            },
           },
         },
-      },
+      });
     });
 
     this.logger.log(
@@ -190,7 +212,7 @@ export class AppointmentsService {
     ]);
 
     return {
-      data: (appointments as AppointmentWithProvider[]).map((apt) => ({
+      appointments: (appointments as AppointmentWithProvider[]).map((apt) => ({
         id: apt.id,
         scheduledAt: apt.scheduledAt,
         status: apt.status,
@@ -203,7 +225,7 @@ export class AppointmentsService {
           location: `${apt.provider.neighborhood || ''}, ${apt.provider.city}`.trim(),
         },
       })),
-      meta: {
+      pagination: {
         total,
         page,
         limit,
@@ -263,7 +285,7 @@ export class AppointmentsService {
     ]);
 
     return {
-      data: (appointments as AppointmentWithClient[]).map((apt) => ({
+      appointments: (appointments as AppointmentWithClient[]).map((apt) => ({
         id: apt.id,
         scheduledAt: apt.scheduledAt,
         status: apt.status,
@@ -276,7 +298,7 @@ export class AppointmentsService {
           email: apt.client.email,
         },
       })),
-      meta: {
+      pagination: {
         total,
         page,
         limit,

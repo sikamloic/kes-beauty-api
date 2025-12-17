@@ -1508,15 +1508,17 @@ DELETE /providers/specialties/1
 
 # 📅 Provider Availability
 
-Gestion des horaires et disponibilités des providers.
+Gestion flexible des disponibilités par date. Chaque créneau est lié à une date précise.
+
+**Principe:** Le provider définit ses créneaux date par date (pas d'horaires hebdomadaires récurrents).
 
 ---
 
-## 1. Set Weekly Availability
+## 1. Create Availability
 
-**Endpoint:** `POST /providers/availability/weekly`
+**Endpoint:** `POST /providers/availability`
 
-**Description:** Définir les horaires réguliers hebdomadaires. Remplace toutes les disponibilités existantes.
+**Description:** Créer un créneau de disponibilité pour une date précise. Plusieurs créneaux possibles par date (sans chevauchement).
 
 **Auth Required:** ✅ Oui (JWT Bearer + Role: provider)
 
@@ -1529,234 +1531,76 @@ Content-Type: application/json
 **Request Body:**
 ```json
 {
-  "days": [
-    {
-      "dayOfWeek": 1,
-      "slots": [
-        { "startTime": "09:00", "endTime": "12:00" },
-        { "startTime": "14:00", "endTime": "18:00" }
-      ],
-      "isActive": true
-    },
-    {
-      "dayOfWeek": 2,
-      "slots": [
-        { "startTime": "10:00", "endTime": "17:00" }
-      ],
-      "isActive": true
-    }
-  ]
+  "date": "2025-12-17",
+  "startTime": "09:35",
+  "endTime": "11:49",
+  "isAvailable": true,
+  "reason": "Créneau matin"
 }
 ```
 
 **Validation:**
-- `dayOfWeek`: 0-6 (0=Dimanche, 1=Lundi, ..., 6=Samedi)
-- `startTime`, `endTime`: Format HH:mm (ex: "09:00")
+- `date`: Format YYYY-MM-DD, doit être >= aujourd'hui
+- `startTime`, `endTime`: Format HH:mm (ex: "09:35", "11:49")
 - `endTime` doit être après `startTime`
-- Au moins 1 slot par jour
+- Pas de chevauchement avec les créneaux existants pour la même date
+- `isAvailable`: true (disponible) ou false (bloqué), défaut: true
 
-**Response Success (200):**
-```json
-{
-  "success": true,
-  "data": {
-    "days": [
-      {
-        "dayOfWeek": 1,
-        "isActive": true,
-        "slots": [
-          { "startTime": "09:00", "endTime": "12:00" },
-          { "startTime": "14:00", "endTime": "18:00" }
-        ]
-      },
-      {
-        "dayOfWeek": 2,
-        "isActive": true,
-        "slots": [
-          { "startTime": "10:00", "endTime": "17:00" }
-        ]
-      }
-    ]
-  }
-}
+**Exemple - Plusieurs créneaux pour une même date:**
+```bash
+# Créneau matin
+POST { "date": "2025-12-17", "startTime": "09:35", "endTime": "11:49" }
+
+# Créneau après-midi (même date) ✅
+POST { "date": "2025-12-17", "startTime": "12:00", "endTime": "17:23" }
 ```
 
-**Response Error (400):**
-```json
-{
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Heure de fin doit être après heure de début (jour 1)"
-  }
-}
-```
-
----
-
-## 2. Get Weekly Availability
-
-**Endpoint:** `GET /providers/availability/weekly`
-
-**Description:** Récupérer les horaires réguliers hebdomadaires du provider.
-
-**Auth Required:** ✅ Oui (JWT Bearer + Role: provider)
-
-**Headers:**
-```
-Authorization: Bearer <accessToken>
-```
-
-**Response Success (200):**
-```json
-{
-  "success": true,
-  "data": {
-    "days": [
-      {
-        "dayOfWeek": 1,
-        "isActive": true,
-        "slots": [
-          { "startTime": "09:00", "endTime": "12:00" },
-          { "startTime": "14:00", "endTime": "18:00" }
-        ]
-      }
-    ]
-  }
-}
-```
-
----
-
-## 3. Toggle Day
-
-**Endpoint:** `PUT /providers/availability/weekly/day/:dayOfWeek/toggle`
-
-**Description:** Activer ou désactiver tous les créneaux d'un jour spécifique.
-
-**Auth Required:** ✅ Oui (JWT Bearer + Role: provider)
-
-**Headers:**
-```
-Authorization: Bearer <accessToken>
-Content-Type: application/json
-```
-
-**Path Parameters:**
-- `dayOfWeek`: 0-6 (0=Dimanche, 1=Lundi, ..., 6=Samedi)
-
-**Request Body:**
-```json
-{
-  "isActive": false
-}
-```
-
-**Exemple:**
-```
-PUT /providers/availability/weekly/day/1/toggle
-```
-
-**Response Success (200):**
-```json
-{
-  "success": true,
-  "data": {
-    "message": "Jour désactivé avec succès",
-    "dayOfWeek": 1,
-    "isActive": false,
-    "updatedCount": 2
-  }
-}
-```
-
-**Response Error (404):**
-```json
-{
-  "success": false,
-  "error": {
-    "code": "NOT_FOUND",
-    "message": "Aucune disponibilité trouvée pour le jour 1"
-  }
-}
-```
-
----
-
-## 4. Create Exception
-
-**Endpoint:** `POST /providers/availability/exceptions`
-
-**Description:** Créer une exception aux horaires réguliers (congé, horaires spéciaux, etc.).
-
-**Auth Required:** ✅ Oui (JWT Bearer + Role: provider)
-
-**Headers:**
-```
-Authorization: Bearer <accessToken>
-Content-Type: application/json
-```
-
-**Request Body (Type: unavailable):**
-```json
-{
-  "date": "2024-12-25",
-  "type": "unavailable",
-  "reason": "Jour férié - Noël"
-}
-```
-
-**Request Body (Type: custom_hours):**
-```json
-{
-  "date": "2024-12-24",
-  "type": "custom_hours",
-  "startTime": "09:00",
-  "endTime": "14:00",
-  "reason": "Fermeture anticipée - Réveillon"
-}
-```
-
-**Validation:**
-- `date`: Format YYYY-MM-DD
-- `type`: "unavailable" ou "custom_hours"
-- Si `type=custom_hours`: `startTime` et `endTime` requis
-- `endTime` doit être après `startTime`
-
-**Response Success (200):**
+**Response Success (201):**
 ```json
 {
   "success": true,
   "data": {
     "id": 1,
-    "date": "2024-12-25",
-    "type": "unavailable",
-    "startTime": null,
-    "endTime": null,
-    "reason": "Jour férié - Noël",
-    "createdAt": "2024-12-04T00:00:00Z"
+    "date": "2025-12-17",
+    "startTime": "09:35",
+    "endTime": "11:49",
+    "isAvailable": true,
+    "reason": "Créneau matin",
+    "createdAt": "2024-12-17T10:00:00Z",
+    "updatedAt": "2024-12-17T10:00:00Z"
   }
 }
 ```
 
-**Response Error (409):**
+**Response Error (409 - Chevauchement):**
 ```json
 {
   "success": false,
   "error": {
     "code": "CONFLICT",
-    "message": "Une exception existe déjà pour la date 2024-12-25"
+    "message": "Ce créneau chevauche un créneau existant (09:35-11:49)"
+  }
+}
+```
+
+**Response Error (400 - Date passée):**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "BAD_REQUEST",
+    "message": "La date doit être aujourd'hui ou dans le futur"
   }
 }
 ```
 
 ---
 
-## 5. Get Exceptions
+## 2. List Availabilities
 
-**Endpoint:** `GET /providers/availability/exceptions`
+**Endpoint:** `GET /providers/availability`
 
-**Description:** Récupérer toutes les exceptions aux horaires réguliers, avec filtrage optionnel par période.
+**Description:** Récupérer tous les créneaux, avec filtrage optionnel par période.
 
 **Auth Required:** ✅ Oui (JWT Bearer + Role: provider)
 
@@ -1771,7 +1615,7 @@ Authorization: Bearer <accessToken>
 
 **Exemple:**
 ```
-GET /providers/availability/exceptions?startDate=2024-12-01&endDate=2024-12-31
+GET /providers/availability?startDate=2025-12-01&endDate=2025-12-31
 ```
 
 **Response Success (200):**
@@ -1781,21 +1625,23 @@ GET /providers/availability/exceptions?startDate=2024-12-01&endDate=2024-12-31
   "data": [
     {
       "id": 1,
-      "date": "2024-12-24",
-      "type": "custom_hours",
-      "startTime": "09:00",
-      "endTime": "14:00",
-      "reason": "Fermeture anticipée",
-      "createdAt": "2024-12-01T10:00:00Z"
+      "date": "2025-12-17",
+      "startTime": "09:35",
+      "endTime": "11:49",
+      "isAvailable": true,
+      "reason": "Créneau matin",
+      "createdAt": "2024-12-17T10:00:00Z",
+      "updatedAt": "2024-12-17T10:00:00Z"
     },
     {
       "id": 2,
-      "date": "2024-12-25",
-      "type": "unavailable",
-      "startTime": null,
-      "endTime": null,
-      "reason": "Jour férié - Noël",
-      "createdAt": "2024-12-01T10:05:00Z"
+      "date": "2025-12-17",
+      "startTime": "12:00",
+      "endTime": "17:23",
+      "isAvailable": true,
+      "reason": null,
+      "createdAt": "2024-12-17T10:05:00Z",
+      "updatedAt": "2024-12-17T10:05:00Z"
     }
   ]
 }
@@ -1803,11 +1649,57 @@ GET /providers/availability/exceptions?startDate=2024-12-01&endDate=2024-12-31
 
 ---
 
-## 6. Update Exception
+## 3. Get Availability
 
-**Endpoint:** `PUT /providers/availability/exceptions/:id`
+**Endpoint:** `GET /providers/availability/:id`
 
-**Description:** Mettre à jour une exception existante.
+**Description:** Récupérer un créneau par son ID.
+
+**Auth Required:** ✅ Oui (JWT Bearer + Role: provider)
+
+**Headers:**
+```
+Authorization: Bearer <accessToken>
+```
+
+**Path Parameters:**
+- `id`: ID du créneau
+
+**Response Success (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "date": "2025-12-17",
+    "startTime": "09:35",
+    "endTime": "11:49",
+    "isAvailable": true,
+    "reason": "Créneau matin",
+    "createdAt": "2024-12-17T10:00:00Z",
+    "updatedAt": "2024-12-17T10:00:00Z"
+  }
+}
+```
+
+**Response Error (404):**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Disponibilité non trouvée"
+  }
+}
+```
+
+---
+
+## 4. Update Availability
+
+**Endpoint:** `PUT /providers/availability/:id`
+
+**Description:** Mettre à jour un créneau existant.
 
 **Auth Required:** ✅ Oui (JWT Bearer + Role: provider)
 
@@ -1818,15 +1710,15 @@ Content-Type: application/json
 ```
 
 **Path Parameters:**
-- `id`: ID de l'exception
+- `id`: ID du créneau
 
 **Request Body:**
 ```json
 {
-  "type": "custom_hours",
   "startTime": "10:00",
-  "endTime": "15:00",
-  "reason": "Formation professionnelle"
+  "endTime": "12:00",
+  "isAvailable": false,
+  "reason": "Congé maladie"
 }
 ```
 
@@ -1836,11 +1728,13 @@ Content-Type: application/json
   "success": true,
   "data": {
     "id": 1,
-    "date": "2024-12-24",
-    "type": "custom_hours",
+    "date": "2025-12-17",
     "startTime": "10:00",
-    "endTime": "15:00",
-    "reason": "Formation professionnelle"
+    "endTime": "12:00",
+    "isAvailable": false,
+    "reason": "Congé maladie",
+    "createdAt": "2024-12-17T10:00:00Z",
+    "updatedAt": "2024-12-17T11:00:00Z"
   }
 }
 ```
@@ -1851,18 +1745,18 @@ Content-Type: application/json
   "success": false,
   "error": {
     "code": "NOT_FOUND",
-    "message": "Exception non trouvée"
+    "message": "Disponibilité non trouvée"
   }
 }
 ```
 
 ---
 
-## 7. Delete Exception
+## 5. Delete Availability
 
-**Endpoint:** `DELETE /providers/availability/exceptions/:id`
+**Endpoint:** `DELETE /providers/availability/:id`
 
-**Description:** Supprimer une exception aux horaires réguliers.
+**Description:** Supprimer un créneau.
 
 **Auth Required:** ✅ Oui (JWT Bearer + Role: provider)
 
@@ -1872,11 +1766,11 @@ Authorization: Bearer <accessToken>
 ```
 
 **Path Parameters:**
-- `id`: ID de l'exception
+- `id`: ID du créneau
 
 **Exemple:**
 ```
-DELETE /providers/availability/exceptions/1
+DELETE /providers/availability/1
 ```
 
 **Response Success (200):**
@@ -1884,7 +1778,7 @@ DELETE /providers/availability/exceptions/1
 {
   "success": true,
   "data": {
-    "message": "Exception supprimée avec succès"
+    "message": "Disponibilité supprimée avec succès"
   }
 }
 ```
@@ -1895,7 +1789,41 @@ DELETE /providers/availability/exceptions/1
   "success": false,
   "error": {
     "code": "NOT_FOUND",
-    "message": "Exception non trouvée"
+    "message": "Disponibilité non trouvée"
+  }
+}
+```
+
+---
+
+## 6. Delete Availabilities by Date
+
+**Endpoint:** `DELETE /providers/availability/date/:date`
+
+**Description:** Supprimer tous les créneaux d'une date précise.
+
+**Auth Required:** ✅ Oui (JWT Bearer + Role: provider)
+
+**Headers:**
+```
+Authorization: Bearer <accessToken>
+```
+
+**Path Parameters:**
+- `date`: Date (YYYY-MM-DD)
+
+**Exemple:**
+```
+DELETE /providers/availability/date/2025-12-17
+```
+
+**Response Success (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "message": "2 disponibilité(s) supprimée(s)",
+    "count": 2
   }
 }
 ```
@@ -2036,9 +1964,9 @@ Accept-Language: fr    // Langue souhaitée (fr, en). Défaut: fr
 | **Provider Profile** | 3 | 2/3 |
 | **Provider Services** | 7 | 6/7 |
 | **Provider Specialties** | 5 | 5/5 |
-| **Provider Availability** | 7 | 7/7 |
+| **Provider Availability** | 6 | 6/6 |
 | **Business Types** | 1 | 0/1 |
-| **TOTAL** | **30** | **22/30** |
+| **TOTAL** | **29** | **21/29** |
 
 ## Codes d'Erreur Communs
 

@@ -36,7 +36,7 @@ export class RefreshTokenService {
 
     return this.prisma.refreshToken.create({
       data: {
-        token: hashedToken,
+        tokenHash: hashedToken,
         userId: data.userId,
         expiresAt: data.expiresAt,
         deviceInfo: data.deviceInfo,
@@ -53,7 +53,7 @@ export class RefreshTokenService {
     const hashedToken = this.hashToken(token);
 
     const refreshToken = await this.prisma.refreshToken.findUnique({
-      where: { token: hashedToken },
+      where: { tokenHash: hashedToken },
     });
 
     if (!refreshToken) {
@@ -89,7 +89,7 @@ export class RefreshTokenService {
       const hashedToken = this.hashToken(token);
 
       await this.prisma.refreshToken.update({
-        where: { token: hashedToken },
+        where: { tokenHash: hashedToken },
         data: {
           isRevoked: true,
           revokedAt: new Date(),

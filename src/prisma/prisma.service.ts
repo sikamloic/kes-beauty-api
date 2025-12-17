@@ -122,10 +122,6 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.providerAvailability;
   }
 
-  get providerAvailabilityException() {
-    return this.prisma.providerAvailabilityException;
-  }
-
   get businessType() {
     return this.prisma.businessType;
   }

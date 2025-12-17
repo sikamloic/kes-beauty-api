@@ -6,14 +6,11 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import {
-  SetWeeklyAvailabilityDto,
-  CreateAvailabilityExceptionDto,
-  UpdateAvailabilityExceptionDto,
-} from '../dto';
+import { CreateAvailabilityDto, UpdateAvailabilityDto } from '../dto';
 
 /**
  * Service de gestion des disponibilités provider
+ * Approche flexible: chaque créneau est lié à une date précise
  */
 @Injectable()
 export class ProviderAvailabilityService {
@@ -22,200 +19,67 @@ export class ProviderAvailabilityService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Définir les disponibilités hebdomadaires
-   * Remplace toutes les disponibilités existantes
+   * Créer un créneau de disponibilité pour une date précise
+   * Permet plusieurs créneaux par date (sans chevauchement)
    */
-  async setWeeklyAvailability(
-    providerId: number,
-    dto: SetWeeklyAvailabilityDto,
-  ) {
-    // Valider les horaires
-    for (const day of dto.days) {
-      for (const slot of day.slots) {
-        if (slot.startTime >= slot.endTime) {
-          throw new BadRequestException(
-            `Heure de fin doit être après heure de début (jour ${day.dayOfWeek})`,
-          );
-        }
-      }
+  async create(providerId: number, dto: CreateAvailabilityDto) {
+    const dateObj = new Date(dto.date);
+
+    // Vérifier que la date est >= aujourd'hui
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (dateObj < today) {
+      throw new BadRequestException(
+        "La date doit être aujourd'hui ou dans le futur",
+      );
     }
 
-    // Supprimer toutes les disponibilités existantes
-    await this.prisma.providerAvailability.deleteMany({
-      where: { providerId },
-    });
-
-    // Créer les nouvelles disponibilités
-    const availabilities = [];
-    for (const day of dto.days) {
-      for (const slot of day.slots) {
-        availabilities.push({
-          providerId,
-          dayOfWeek: day.dayOfWeek,
-          startTime: slot.startTime,
-          endTime: slot.endTime,
-          isActive: day.isActive ?? true,
-        });
-      }
+    // Valider que endTime > startTime
+    if (dto.startTime >= dto.endTime) {
+      throw new BadRequestException(
+        'Heure de fin doit être après heure de début',
+      );
     }
 
-    await this.prisma.providerAvailability.createMany({
-      data: availabilities,
-    });
-
-    this.logger.log(
-      `Disponibilités hebdomadaires définies pour provider ${providerId}`,
-    );
-
-    return this.getWeeklyAvailability(providerId);
-  }
-
-  /**
-   * Récupérer les disponibilités hebdomadaires
-   */
-  async getWeeklyAvailability(providerId: number) {
-    const availabilities = await this.prisma.providerAvailability.findMany({
-      where: { providerId },
-      orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
-    });
-
-    // Grouper par jour
-    const grouped = availabilities.reduce(
-      (acc: Record<number, any>, avail: any) => {
-        if (!acc[avail.dayOfWeek]) {
-          acc[avail.dayOfWeek] = {
-            dayOfWeek: avail.dayOfWeek,
-            isActive: avail.isActive,
-            slots: [],
-          };
-        }
-        acc[avail.dayOfWeek].slots.push({
-          startTime: avail.startTime,
-          endTime: avail.endTime,
-        });
-        return acc;
-      },
-      {} as Record<number, any>,
-    );
-
-    return {
-      days: Object.values(grouped),
-    };
-  }
-
-  /**
-   * Activer/désactiver un jour spécifique
-   */
-  async toggleDay(providerId: number, dayOfWeek: number, isActive: boolean) {
-    if (dayOfWeek < 0 || dayOfWeek > 6) {
-      throw new BadRequestException('dayOfWeek doit être entre 0 et 6');
-    }
-
-    const existing = await this.prisma.providerAvailability.findMany({
+    // Vérifier les chevauchements avec les créneaux existants pour cette date
+    const existingSlots = await this.prisma.providerAvailability.findMany({
       where: {
         providerId,
-        dayOfWeek,
+        date: dateObj,
       },
     });
 
-    if (existing.length === 0) {
-      throw new NotFoundException(
-        `Aucune disponibilité trouvée pour le jour ${dayOfWeek}`,
-      );
-    }
-
-    // Mettre à jour chaque disponibilité individuellement
-    // Note: updateMany ne fonctionne pas correctement, on utilise update sur chaque enregistrement
-    await Promise.all(
-      existing.map((avail) =>
-        this.prisma.providerAvailability.update({
-          where: { id: avail.id },
-          data: { isActive },
-        }),
-      ),
-    );
-
-    this.logger.log(
-      `Jour ${dayOfWeek} ${isActive ? 'activé' : 'désactivé'} pour provider ${providerId} (${existing.length} créneaux)`,
-    );
-
-    return {
-      message: `Jour ${isActive ? 'activé' : 'désactivé'} avec succès`,
-      dayOfWeek,
-      isActive,
-      updatedCount: existing.length,
-    };
-  }
-
-  /**
-   * Créer une exception de disponibilité
-   */
-  async createException(
-    providerId: number,
-    dto: CreateAvailabilityExceptionDto,
-  ) {
-    // Valider les horaires si custom_hours
-    if (dto.type === 'custom_hours') {
-      if (!dto.startTime || !dto.endTime) {
-        throw new BadRequestException(
-          'startTime et endTime requis pour type=custom_hours',
-        );
-      }
-      if (dto.startTime >= dto.endTime) {
-        throw new BadRequestException(
-          'Heure de fin doit être après heure de début',
+    for (const slot of existingSlots) {
+      if (this.checkTimeOverlap(dto.startTime, dto.endTime, slot.startTime, slot.endTime)) {
+        throw new ConflictException(
+          `Ce créneau chevauche un créneau existant (${slot.startTime}-${slot.endTime})`,
         );
       }
     }
 
-    // Vérifier si exception existe déjà pour cette date
-    const existing = await this.prisma.providerAvailabilityException.findUnique(
-      {
-        where: {
-          providerId_date: {
-            providerId,
-            date: new Date(dto.date),
-          },
-        },
-      },
-    );
-
-    if (existing) {
-      throw new ConflictException(
-        `Une exception existe déjà pour la date ${dto.date}`,
-      );
-    }
-
-    const exception = await this.prisma.providerAvailabilityException.create({
+    const availability = await this.prisma.providerAvailability.create({
       data: {
         providerId,
-        date: new Date(dto.date),
-        type: dto.type,
+        date: dateObj,
         startTime: dto.startTime,
         endTime: dto.endTime,
+        isAvailable: dto.isAvailable ?? true,
         reason: dto.reason,
       },
     });
 
     this.logger.log(
-      `Exception créée pour provider ${providerId} le ${dto.date}`,
+      `Disponibilité créée pour provider ${providerId} le ${dto.date}: ${dto.startTime}-${dto.endTime}`,
     );
 
-    return {
-      id: exception.id,
-      date: exception.date.toISOString().split('T')[0],
-      type: exception.type,
-      startTime: exception.startTime,
-      endTime: exception.endTime,
-      reason: exception.reason,
-      createdAt: exception.createdAt,
-    };
+    return this.formatAvailability(availability);
   }
 
   /**
-   * Liste des exceptions
+   * Récupérer les disponibilités d'un provider
+   * Filtrage optionnel par période
    */
-  async getExceptions(providerId: number, startDate?: string, endDate?: string) {
+  async findAll(providerId: number, startDate?: string, endDate?: string) {
     const where: any = { providerId };
 
     if (startDate || endDate) {
@@ -228,106 +92,126 @@ export class ProviderAvailabilityService {
       }
     }
 
-    const exceptions = await this.prisma.providerAvailabilityException.findMany(
-      {
-        where,
-        orderBy: { date: 'asc' },
-      },
-    );
+    const availabilities = await this.prisma.providerAvailability.findMany({
+      where,
+      orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
+    });
 
-    return exceptions.map((ex: any) => ({
-      id: ex.id,
-      date: ex.date.toISOString().split('T')[0],
-      type: ex.type,
-      startTime: ex.startTime,
-      endTime: ex.endTime,
-      reason: ex.reason,
-      createdAt: ex.createdAt,
-    }));
+    return availabilities.map((a) => this.formatAvailability(a));
   }
 
   /**
-   * Mettre à jour une exception
+   * Récupérer une disponibilité par ID
    */
-  async updateException(
-    exceptionId: number,
-    providerId: number,
-    dto: UpdateAvailabilityExceptionDto,
-  ) {
-    const existing = await this.prisma.providerAvailabilityException.findFirst({
-      where: {
-        id: exceptionId,
-        providerId,
-      },
+  async findOne(id: number, providerId: number) {
+    const availability = await this.prisma.providerAvailability.findFirst({
+      where: { id, providerId },
+    });
+
+    if (!availability) {
+      throw new NotFoundException('Disponibilité non trouvée');
+    }
+
+    return this.formatAvailability(availability);
+  }
+
+  /**
+   * Mettre à jour une disponibilité
+   */
+  async update(id: number, providerId: number, dto: UpdateAvailabilityDto) {
+    const existing = await this.prisma.providerAvailability.findFirst({
+      where: { id, providerId },
     });
 
     if (!existing) {
-      throw new NotFoundException('Exception non trouvée');
+      throw new NotFoundException('Disponibilité non trouvée');
     }
 
-    // Valider les horaires si custom_hours
-    const type = dto.type ?? existing.type;
-    if (type === 'custom_hours') {
-      const startTime = dto.startTime ?? existing.startTime;
-      const endTime = dto.endTime ?? existing.endTime;
+    // Valider les horaires si modifiés
+    const startTime = dto.startTime ?? existing.startTime;
+    const endTime = dto.endTime ?? existing.endTime;
 
-      if (!startTime || !endTime) {
-        throw new BadRequestException(
-          'startTime et endTime requis pour type=custom_hours',
-        );
-      }
-      if (startTime >= endTime) {
-        throw new BadRequestException(
-          'Heure de fin doit être après heure de début',
-        );
+    if (startTime >= endTime) {
+      throw new BadRequestException(
+        'Heure de fin doit être après heure de début',
+      );
+    }
+
+    // Vérifier les chevauchements si les horaires changent
+    if (dto.startTime || dto.endTime) {
+      const existingSlots = await this.prisma.providerAvailability.findMany({
+        where: {
+          providerId,
+          date: existing.date,
+          id: { not: id },
+        },
+      });
+
+      for (const slot of existingSlots) {
+        if (this.checkTimeOverlap(startTime, endTime, slot.startTime, slot.endTime)) {
+          throw new ConflictException(
+            `Ce créneau chevauche un créneau existant (${slot.startTime}-${slot.endTime})`,
+          );
+        }
       }
     }
 
-    const exception = await this.prisma.providerAvailabilityException.update({
-      where: { id: exceptionId },
+    const availability = await this.prisma.providerAvailability.update({
+      where: { id },
       data: {
-        type: dto.type,
         startTime: dto.startTime,
         endTime: dto.endTime,
+        isAvailable: dto.isAvailable,
         reason: dto.reason,
       },
     });
 
-    this.logger.log(`Exception ${exceptionId} mise à jour`);
+    this.logger.log(`Disponibilité ${id} mise à jour`);
 
-    return {
-      id: exception.id,
-      date: exception.date.toISOString().split('T')[0],
-      type: exception.type,
-      startTime: exception.startTime,
-      endTime: exception.endTime,
-      reason: exception.reason,
-    };
+    return this.formatAvailability(availability);
   }
 
   /**
-   * Supprimer une exception
+   * Supprimer une disponibilité
    */
-  async deleteException(exceptionId: number, providerId: number) {
-    const existing = await this.prisma.providerAvailabilityException.findFirst({
-      where: {
-        id: exceptionId,
-        providerId,
-      },
+  async delete(id: number, providerId: number) {
+    const existing = await this.prisma.providerAvailability.findFirst({
+      where: { id, providerId },
     });
 
     if (!existing) {
-      throw new NotFoundException('Exception non trouvée');
+      throw new NotFoundException('Disponibilité non trouvée');
     }
 
-    await this.prisma.providerAvailabilityException.delete({
-      where: { id: exceptionId },
+    await this.prisma.providerAvailability.delete({
+      where: { id },
     });
 
-    this.logger.log(`Exception ${exceptionId} supprimée`);
+    this.logger.log(`Disponibilité ${id} supprimée`);
+
+    return { message: 'Disponibilité supprimée avec succès' };
+  }
+
+  /**
+   * Supprimer toutes les disponibilités d'une date
+   */
+  async deleteByDate(providerId: number, date: string) {
+    const dateObj = new Date(date);
+
+    const result = await this.prisma.providerAvailability.deleteMany({
+      where: {
+        providerId,
+        date: dateObj,
+      },
+    });
+
+    this.logger.log(
+      `${result.count} disponibilité(s) supprimée(s) pour provider ${providerId} le ${date}`,
+    );
 
     return {
-      message: 'Exception supprimée avec succès',
+      message: `${result.count} disponibilité(s) supprimée(s)`,
+      count: result.count,
     };
   }
 
@@ -340,49 +224,52 @@ export class ProviderAvailabilityService {
     startTime: string,
     endTime: string,
   ): Promise<boolean> {
-    // Vérifier les exceptions d'abord
     const dateString = date.toISOString().split('T')[0];
     const dateOnly = new Date(dateString!);
-    const exception = await this.prisma.providerAvailabilityException.findUnique(
-      {
-        where: {
-          providerId_date: {
-            providerId,
-            date: dateOnly,
-          },
-        },
-      },
-    );
 
-    if (exception) {
-      if (exception.type === 'unavailable') {
-        return false;
-      }
-      // custom_hours
-      if (exception.startTime && exception.endTime) {
-        return (
-          startTime >= exception.startTime && endTime <= exception.endTime
-        );
-      }
-    }
-
-    // Vérifier les horaires réguliers
-    const dayOfWeek = date.getDay();
-    const availabilities = await this.prisma.providerAvailability.findMany({
+    const slots = await this.prisma.providerAvailability.findMany({
       where: {
         providerId,
-        dayOfWeek,
-        isActive: true,
+        date: dateOnly,
+        isAvailable: true,
       },
     });
 
-    if (availabilities.length === 0) {
+    if (slots.length === 0) {
       return false;
     }
 
-    // Vérifier si le créneau demandé est dans un des créneaux disponibles
-    return availabilities.some(
-      (avail: any) => startTime >= avail.startTime && endTime <= avail.endTime,
+    // Vérifier si le créneau demandé est contenu dans un des créneaux disponibles
+    return slots.some(
+      (slot) => startTime >= slot.startTime && endTime <= slot.endTime,
     );
+  }
+
+  /**
+   * Vérifier si deux créneaux horaires se chevauchent
+   */
+  private checkTimeOverlap(
+    start1: string,
+    end1: string,
+    start2: string,
+    end2: string,
+  ): boolean {
+    return start1 < end2 && end1 > start2;
+  }
+
+  /**
+   * Formater une disponibilité pour la réponse API
+   */
+  private formatAvailability(availability: any) {
+    return {
+      id: availability.id,
+      date: availability.date.toISOString().split('T')[0],
+      startTime: availability.startTime,
+      endTime: availability.endTime,
+      isAvailable: availability.isAvailable,
+      reason: availability.reason,
+      createdAt: availability.createdAt,
+      updatedAt: availability.updatedAt,
+    };
   }
 }

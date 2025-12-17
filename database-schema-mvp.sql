@@ -41,7 +41,7 @@ CREATE TABLE users (
   
   -- Authentification
   phone VARCHAR(20) UNIQUE NOT NULL COMMENT 'Format: +237XXXXXXXXX',
-  email VARCHAR(255) UNIQUE COMMENT 'Email optionnel',
+  email VARCHAR(191) UNIQUE COMMENT 'Email optionnel',
   password_hash VARCHAR(255) NOT NULL,
   
   -- Vérification
@@ -98,8 +98,8 @@ CREATE TABLE user_roles (
 CREATE TABLE refresh_tokens (
   id INT PRIMARY KEY AUTO_INCREMENT,
   
-  -- Token
-  token VARCHAR(500) UNIQUE NOT NULL COMMENT 'JWT refresh token',
+  -- Token (stocké en hash SHA-256 pour sécurité)
+  token_hash VARCHAR(64) UNIQUE NOT NULL COMMENT 'SHA-256 hash du refresh token',
   user_id INT NOT NULL,
   
   -- Métadonnées
@@ -116,7 +116,7 @@ CREATE TABLE refresh_tokens (
   revoked_at TIMESTAMP NULL COMMENT 'Date de révocation',
   
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-  INDEX idx_token (token),
+  INDEX idx_token_hash (token_hash),
   INDEX idx_user_id (user_id),
   INDEX idx_expires_at (expires_at),
   INDEX idx_revoked (is_revoked, expires_at)
@@ -130,9 +130,9 @@ CREATE TABLE otps (
   id INT PRIMARY KEY AUTO_INCREMENT,
   
   -- Identification
-  identifier VARCHAR(255) NOT NULL COMMENT 'phone, email, userId, etc.',
+  identifier VARCHAR(100) NOT NULL COMMENT 'phone, email, userId, etc.',
   code VARCHAR(10) NOT NULL COMMENT 'Code OTP',
-  type VARCHAR(50) NOT NULL COMMENT 'phone_verification, email_verification, password_reset, mfa',
+  type VARCHAR(30) NOT NULL COMMENT 'phone_verification, email_verification, password_reset, mfa',
   
   -- Expiration et sécurité
   expires_at DATETIME NOT NULL COMMENT 'Date expiration du code',
@@ -378,45 +378,27 @@ CREATE TABLE provider_specialties (
 COMMENT="Spécialités et domaines d'expertise des providers";
 
 -- ==============================================
--- 14. PROVIDER_AVAILABILITIES - Horaires réguliers
+-- 14. PROVIDER_AVAILABILITIES - Disponibilités flexibles par date
 -- ==============================================
 CREATE TABLE provider_availabilities (
   id INT PRIMARY KEY AUTO_INCREMENT,
   provider_id INT NOT NULL COMMENT 'FK vers provider_profiles',
-  day_of_week INT NOT NULL COMMENT '0=Dimanche, 1=Lundi, ..., 6=Samedi',
-  start_time VARCHAR(5) NOT NULL COMMENT 'Format HH:mm (ex: 09:00)',
-  end_time VARCHAR(5) NOT NULL COMMENT 'Format HH:mm (ex: 17:00)',
-  is_active BOOLEAN NOT NULL DEFAULT TRUE COMMENT 'Activer/désactiver ce créneau',
+  date DATE NOT NULL COMMENT 'Date spécifique (YYYY-MM-DD)',
+  start_time VARCHAR(5) NOT NULL COMMENT 'Format HH:mm (ex: 09:35)',
+  end_time VARCHAR(5) NOT NULL COMMENT 'Format HH:mm (ex: 11:49)',
+  is_available BOOLEAN NOT NULL DEFAULT TRUE COMMENT 'true=disponible, false=bloqué',
+  reason VARCHAR(255) NULL COMMENT 'Raison optionnelle (congé, formation, etc.)',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   
   FOREIGN KEY (provider_id) REFERENCES provider_profiles(id) ON DELETE CASCADE,
   
-  UNIQUE KEY unique_provider_day_time (provider_id, day_of_week, start_time),
-  INDEX idx_provider_day_active (provider_id, day_of_week, is_active)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-COMMENT="Horaires réguliers hebdomadaires des providers";
-
--- ==============================================
--- 15. PROVIDER_AVAILABILITY_EXCEPTIONS - Exceptions horaires
--- ==============================================
-CREATE TABLE provider_availability_exceptions (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  provider_id INT NOT NULL COMMENT 'FK vers provider_profiles',
-  date DATE NOT NULL COMMENT 'Date de l\'exception',
-  type VARCHAR(20) NOT NULL COMMENT 'unavailable ou custom_hours',
-  start_time VARCHAR(5) NULL COMMENT 'Heure début si custom_hours',
-  end_time VARCHAR(5) NULL COMMENT 'Heure fin si custom_hours',
-  reason VARCHAR(255) NULL COMMENT 'Raison de l\'exception (optionnel)',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  
-  FOREIGN KEY (provider_id) REFERENCES provider_profiles(id) ON DELETE CASCADE,
-  
-  UNIQUE KEY unique_provider_date (provider_id, date),
+  -- Un seul créneau par provider/date/heure de début (chevauchement géré par l'application)
+  UNIQUE KEY unique_provider_date_time (provider_id, date, start_time),
   INDEX idx_provider_date (provider_id, date),
-  INDEX idx_date_type (date, type)
+  INDEX idx_date_available (date, is_available)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-COMMENT="Exceptions aux horaires réguliers (congés, horaires spéciaux)";
+COMMENT="Disponibilités flexibles par date - plusieurs créneaux possibles par jour";
 
 -- ==============================================
 -- 16. APPOINTMENTS - Réservations core (ISP)
