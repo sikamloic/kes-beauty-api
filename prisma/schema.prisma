@@ -311,15 +311,15 @@ model ProviderRegistrationDocument {
 /// Disponibilités provider - approche flexible par date (SRP)
 /// Chaque entrée représente un créneau de disponibilité pour une date précise
 model ProviderAvailability {
-  id         Int      @id @default(autoincrement())
-  providerId Int      @map("provider_id")
-  date       DateTime @db.Date // Date spécifique (YYYY-MM-DD)
-  startTime  String   @map("start_time") @db.VarChar(5) // Format HH:mm (ex: "09:00")
-  endTime    String   @map("end_time") @db.VarChar(5) // Format HH:mm (ex: "17:00")
-  isAvailable Boolean @default(true) @map("is_available") // true=disponible, false=bloqué
-  reason     String?  @db.VarChar(255) // Raison optionnelle (congé, formation, etc.)
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  id          Int      @id @default(autoincrement())
+  providerId  Int      @map("provider_id")
+  date        DateTime @db.Date // Date spécifique (YYYY-MM-DD)
+  startTime   DateTime @map("start_time") @db.Time(0) // Format HH:mm
+  endTime     DateTime @map("end_time") @db.Time(0) // Format HH:mm
+  isAvailable Boolean  @default(true) @map("is_available") // true=disponible, false=bloqué
+  reason      String?  @db.VarChar(255) // Raison optionnelle (congé, formation, etc.)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   // Relations
   provider ProviderProfile @relation(fields: [providerId], references: [id], onDelete: Cascade)

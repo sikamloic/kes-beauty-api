@@ -7,6 +7,16 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateAvailabilityDto, UpdateAvailabilityDto } from '../dto';
+import {
+  parseLocalDate,
+  isPastDate,
+  isToday,
+  isPastTimeToday,
+  formatDate,
+  parseTime,
+  formatTime,
+  isTimeBefore,
+} from '../../common/utils';
 
 /**
  * Service de gestion des disponibilités provider
@@ -23,19 +33,29 @@ export class ProviderAvailabilityService {
    * Permet plusieurs créneaux par date (sans chevauchement)
    */
   async create(providerId: number, dto: CreateAvailabilityDto) {
-    const dateObj = new Date(dto.date);
+    // Parser la date en local (pas UTC)
+    const dateObj = parseLocalDate(dto.date);
 
     // Vérifier que la date est >= aujourd'hui
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (dateObj < today) {
+    if (isPastDate(dateObj)) {
       throw new BadRequestException(
         "La date doit être aujourd'hui ou dans le futur",
       );
     }
 
+    // Si c'est aujourd'hui, vérifier que startTime est dans le futur
+    if (isToday(dateObj) && isPastTimeToday(dto.startTime)) {
+      throw new BadRequestException(
+        "L'heure de début doit être dans le futur pour la date d'aujourd'hui",
+      );
+    }
+
+    // Parser les heures
+    const startTimeObj = parseTime(dto.startTime);
+    const endTimeObj = parseTime(dto.endTime);
+
     // Valider que endTime > startTime
-    if (dto.startTime >= dto.endTime) {
+    if (!isTimeBefore(startTimeObj, endTimeObj)) {
       throw new BadRequestException(
         'Heure de fin doit être après heure de début',
       );
@@ -50,9 +70,9 @@ export class ProviderAvailabilityService {
     });
 
     for (const slot of existingSlots) {
-      if (this.checkTimeOverlap(dto.startTime, dto.endTime, slot.startTime, slot.endTime)) {
+      if (this.checkTimeOverlap(startTimeObj, endTimeObj, slot.startTime, slot.endTime)) {
         throw new ConflictException(
-          `Ce créneau chevauche un créneau existant (${slot.startTime}-${slot.endTime})`,
+          `Ce créneau chevauche un créneau existant (${formatTime(slot.startTime)}-${formatTime(slot.endTime)})`,
         );
       }
     }
@@ -61,8 +81,8 @@ export class ProviderAvailabilityService {
       data: {
         providerId,
         date: dateObj,
-        startTime: dto.startTime,
-        endTime: dto.endTime,
+        startTime: startTimeObj,
+        endTime: endTimeObj,
         isAvailable: dto.isAvailable ?? true,
         reason: dto.reason,
       },
@@ -127,13 +147,27 @@ export class ProviderAvailabilityService {
       throw new NotFoundException('Disponibilité non trouvée');
     }
 
-    // Valider les horaires si modifiés
-    const startTime = dto.startTime ?? existing.startTime;
-    const endTime = dto.endTime ?? existing.endTime;
+    // Vérifier que la date du créneau n'est pas dans le passé
+    if (isPastDate(existing.date)) {
+      throw new BadRequestException(
+        'Impossible de modifier un créneau dont la date est passée',
+      );
+    }
 
-    if (startTime >= endTime) {
+    // Valider les horaires si modifiés
+    const startTimeObj = dto.startTime ? parseTime(dto.startTime) : existing.startTime;
+    const endTimeObj = dto.endTime ? parseTime(dto.endTime) : existing.endTime;
+
+    if (!isTimeBefore(startTimeObj, endTimeObj)) {
       throw new BadRequestException(
         'Heure de fin doit être après heure de début',
+      );
+    }
+
+    // Si c'est aujourd'hui et qu'on modifie startTime, vérifier que c'est dans le futur
+    if (dto.startTime && isToday(existing.date) && isPastTimeToday(dto.startTime)) {
+      throw new BadRequestException(
+        "L'heure de début doit être dans le futur pour la date d'aujourd'hui",
       );
     }
 
@@ -148,9 +182,9 @@ export class ProviderAvailabilityService {
       });
 
       for (const slot of existingSlots) {
-        if (this.checkTimeOverlap(startTime, endTime, slot.startTime, slot.endTime)) {
+        if (this.checkTimeOverlap(startTimeObj, endTimeObj, slot.startTime, slot.endTime)) {
           throw new ConflictException(
-            `Ce créneau chevauche un créneau existant (${slot.startTime}-${slot.endTime})`,
+            `Ce créneau chevauche un créneau existant (${formatTime(slot.startTime)}-${formatTime(slot.endTime)})`,
           );
         }
       }
@@ -159,8 +193,8 @@ export class ProviderAvailabilityService {
     const availability = await this.prisma.providerAvailability.update({
       where: { id },
       data: {
-        startTime: dto.startTime,
-        endTime: dto.endTime,
+        startTime: dto.startTime ? parseTime(dto.startTime) : undefined,
+        endTime: dto.endTime ? parseTime(dto.endTime) : undefined,
         isAvailable: dto.isAvailable,
         reason: dto.reason,
       },
@@ -224,13 +258,14 @@ export class ProviderAvailabilityService {
     startTime: string,
     endTime: string,
   ): Promise<boolean> {
-    const dateString = date.toISOString().split('T')[0];
-    const dateOnly = new Date(dateString!);
+    const dateObj = parseLocalDate(formatDate(date));
+    const startTimeObj = parseTime(startTime);
+    const endTimeObj = parseTime(endTime);
 
     const slots = await this.prisma.providerAvailability.findMany({
       where: {
         providerId,
-        date: dateOnly,
+        date: dateObj,
         isAvailable: true,
       },
     });
@@ -241,7 +276,9 @@ export class ProviderAvailabilityService {
 
     // Vérifier si le créneau demandé est contenu dans un des créneaux disponibles
     return slots.some(
-      (slot) => startTime >= slot.startTime && endTime <= slot.endTime,
+      (slot) =>
+        !isTimeBefore(startTimeObj, slot.startTime) &&
+        !isTimeBefore(slot.endTime, endTimeObj),
     );
   }
 
@@ -249,12 +286,12 @@ export class ProviderAvailabilityService {
    * Vérifier si deux créneaux horaires se chevauchent
    */
   private checkTimeOverlap(
-    start1: string,
-    end1: string,
-    start2: string,
-    end2: string,
+    start1: Date,
+    end1: Date,
+    start2: Date,
+    end2: Date,
   ): boolean {
-    return start1 < end2 && end1 > start2;
+    return isTimeBefore(start1, end2) && isTimeBefore(start2, end1);
   }
 
   /**
@@ -263,9 +300,9 @@ export class ProviderAvailabilityService {
   private formatAvailability(availability: any) {
     return {
       id: availability.id,
-      date: availability.date.toISOString().split('T')[0],
-      startTime: availability.startTime,
-      endTime: availability.endTime,
+      date: formatDate(availability.date),
+      startTime: formatTime(availability.startTime),
+      endTime: formatTime(availability.endTime),
       isAvailable: availability.isAvailable,
       reason: availability.reason,
       createdAt: availability.createdAt,

@@ -10,6 +10,7 @@ export default () => ({
     port: parseInt(process.env.PORT || '4000', 10),
     name: process.env.APP_NAME || 'Beauty Platform API',
     url: process.env.APP_URL || 'http://localhost:4000',
+    timezone: process.env.TZ || 'Africa/Douala',
   },
 
   // Base de données

@@ -1,3 +1,8 @@
+import 'dotenv/config';
+
+// Définir le timezone avant tout (doit être fait avant les imports qui utilisent Date)
+process.env.TZ = process.env.TZ || 'Africa/Douala';
+
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
