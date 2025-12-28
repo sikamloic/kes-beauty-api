@@ -7,8 +7,10 @@ import {
   UseGuards,
   Get,
   UnauthorizedException,
+  Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { ThrottlerGuard, Throttle, SkipThrottle } from '@nestjs/throttler';
 import { JwtTokenService, JwtAuthGuard, PhoneValidationService } from '../common';
 import { RefreshTokenService, PhoneVerificationService } from './services';
 import { LoginDto, SendVerificationCodeDto, VerifyPhoneDto } from './dto';
@@ -18,9 +20,17 @@ import * as bcrypt from 'bcrypt';
 /**
  * Contrôleur d'authentification
  * Gère login, refresh, logout
+ * 
+ * Rate limiting appliqué sur endpoints sensibles:
+ * - login: 5 tentatives/minute
+ * - send-verification-code: 3 demandes/minute
+ * - verify-phone: 5 tentatives/minute
  */
 @Controller('auth')
+@UseGuards(ThrottlerGuard)
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtToken: JwtTokenService,
@@ -32,8 +42,10 @@ export class AuthController {
   /**
    * POST /auth/login
    * Connexion avec téléphone/email + mot de passe
+   * Rate limit: 5 tentatives par minute (protection brute-force)
    */
   @Post('login')
+  @Throttle({ auth: { ttl: 60000, limit: 5 } })
   async login(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) response: Response,
@@ -51,13 +63,9 @@ export class AuthController {
         ? login 
         : this.phoneValidation.validateAndNormalize(login);
       
-      console.log('🔍 Login attempt:', {
-        original: login,
-        normalized: normalizedLogin,
-        isEmail,
-      });
+      this.logger.debug(`Login attempt: isEmail=${isEmail}`);
     } catch (error) {
-      console.log('❌ Normalisation échouée:', login, error);
+      this.logger.warn('Phone normalization failed');
       throw new UnauthorizedException('Identifiants invalides');
     }
 
@@ -71,12 +79,12 @@ export class AuthController {
     });
 
     if (!user) {
-      console.log('❌ User null');
+      this.logger.debug('User not found');
       throw new UnauthorizedException('Téléphone ou mot de passe incorrect');
     }
 
     if (!user.isActive) {
-      console.log('❌ User inactif');
+      this.logger.debug('User inactive');
       throw new UnauthorizedException(
         'Votre compte a été désactivé. Contactez le support pour plus d\'informations.'
       );
@@ -84,13 +92,10 @@ export class AuthController {
 
     // Vérifier mot de passe
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
-    console.log('🔐 Password check:', {
-      provided: password.substring(0, 3) + '***',
-      valid: isPasswordValid,
-    });
+    this.logger.debug(`Password validation: ${isPasswordValid ? 'success' : 'failed'}`);
     
     if (!isPasswordValid) {
-      console.log('❌ Mot de passe invalide');
+      this.logger.debug('Invalid password');
       throw new UnauthorizedException('Téléphone ou mot de passe incorrect');
     }
 
@@ -156,6 +161,7 @@ export class AuthController {
    * Rafraîchir l'access token
    */
   @Post('refresh')
+  @SkipThrottle()
   async refresh(
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
@@ -205,7 +211,7 @@ export class AuthController {
         clientId: user.clientProfile?.id,
       });
 
-      // ROTATION: Révoquer l'ancien refresh token
+      // ROTATION: Révoquer l'ancien refresh token AVANT de créer le nouveau
       await this.refreshTokenService.revoke(refreshToken);
 
       // Stocker nouveau refresh token en BD
@@ -219,9 +225,6 @@ export class AuthController {
         deviceInfo: request.headers['user-agent'],
         ipAddress: request.ip,
       });
-
-      // Révoquer ancien refresh token
-      await this.refreshTokenService.revoke(refreshToken);
 
       // Limiter nombre de tokens
       await this.refreshTokenService.limitTokensPerUser(user.id, 5);
@@ -249,6 +252,7 @@ export class AuthController {
    * Déconnexion (révoque refresh token)
    */
   @Post('logout')
+  @SkipThrottle()
   async logout(
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
@@ -274,6 +278,7 @@ export class AuthController {
    * Déconnexion de tous les appareils
    */
   @Post('logout-all')
+  @SkipThrottle()
   @UseGuards(JwtAuthGuard)
   async logoutAll(@Req() request: any) {
     const userId = request.user.userId;
@@ -290,6 +295,7 @@ export class AuthController {
    * Voir sessions actives
    */
   @Get('sessions')
+  @SkipThrottle()
   @UseGuards(JwtAuthGuard)
   async getSessions(@Req() request: any) {
     const userId = request.user.userId;
@@ -310,8 +316,10 @@ export class AuthController {
   /**
    * POST /auth/send-verification-code
    * Envoyer code de vérification SMS
+   * Rate limit: 3 demandes par minute (protection spam SMS)
    */
   @Post('send-verification-code')
+  @Throttle({ otp: { ttl: 60000, limit: 3 } })
   async sendVerificationCode(@Body() dto: SendVerificationCodeDto) {
     return this.phoneVerification.sendVerificationCode(dto.phone);
   }
@@ -319,8 +327,10 @@ export class AuthController {
   /**
    * POST /auth/verify-phone
    * Vérifier le code SMS
+   * Rate limit: 5 tentatives par minute (protection brute-force OTP)
    */
   @Post('verify-phone')
+  @Throttle({ auth: { ttl: 60000, limit: 5 } })
   async verifyPhone(@Body() dto: VerifyPhoneDto) {
     return this.phoneVerification.verifyCode(dto.phone, dto.code);
   }

@@ -11,14 +11,16 @@
 ## 📑 Table des Matières
 
 1. [Auth Module](#auth-module) - 7 endpoints
-2. [Providers Module](#providers-module) - 22 endpoints
-   - [Profile](#profile) - 3 endpoints
-   - [Services](#services) - 6 endpoints
+2. [Providers Module](#providers-module) - 29 endpoints
+   - [Profile](#profile) - 2 endpoints
+   - [Services](#services) - 7 endpoints
    - [Specialties](#specialties) - 5 endpoints
-   - [Availability](#provider-availability) - 7 endpoints
+   - [Availability](#provider-availability) - 6 endpoints
+   - [Dashboard](#provider-dashboard) - 7 endpoints
    - [Business Types](#business-types) - 1 endpoint
+3. [Appointments Module](#appointments-module) - 6 endpoints
 
-**Total:** 29 endpoints
+**Total:** 42 endpoints
 
 ---
 
@@ -67,7 +69,7 @@ Accept-Language: en
 
 **Validation:**
 - `login`: min 3 caractères, max 255
-- `password`: min 8 caractères, max 100
+- `password`: min 8 caractères, 1 majuscule, 1 minuscule, 1 chiffre, 1 caractère spécial (@$!%*?&)
 
 **Response Success (200):**
 ```json
@@ -384,7 +386,7 @@ Authorization: Bearer <accessToken>
 {
   "fullName": "Marie Dupont",         // OBLIGATOIRE - Nom complet (2-100 caractères)
   "phone": "+237655443322",           // OBLIGATOIRE - Téléphone camerounais
-  "password": "Password123",          // OBLIGATOIRE - Min 6 caractères
+  "password": "Password123!",         // OBLIGATOIRE - Min 8 caractères + complexité
   "city": "Douala"                    // OBLIGATOIRE - Ville d'activité
 }
 ```
@@ -406,7 +408,7 @@ Authorization: Bearer <accessToken>
 **Validation:**
 - `fullName`: 2-100 caractères
 - `phone`: Format camerounais valide, unique
-- `password`: Min 6 caractères, max 100
+- `password`: Min 8 caractères, 1 majuscule, 1 minuscule, 1 chiffre, 1 caractère spécial (@$!%*?&)
 - `city`: Requis
 
 **Response Success (201):**
@@ -504,64 +506,6 @@ Authorization: Bearer <accessToken>
 ```
 
 **Note:** La réponse simplifiée ne retourne plus les objets `verification`, `statistics` et `serviceSettings` qui seront gérés par des endpoints dédiés.
-
----
-
-### 2b. Get Provider Full Profile (avec relations)
-
-**Endpoint:** `GET /providers/profile/full`
-
-**Description:** Récupérer le profil complet avec toutes les relations (verification, statistics, settings).
-
-**Auth Required:** ✅ Oui (JWT Bearer + Role: provider)
-
-**Response Success (200):**
-```json
-{
-  "success": true,
-  "data": {
-    "businessName": "Salon Afro Beauty",
-    "businessType": {
-      "id": 2,
-      "code": "salon",
-      "label": "Gerant d'un salon",
-      "icon": "scissors"
-    },
-    "bio": "Spécialiste coiffure afro depuis 8 ans...",
-    "yearsExperience": 8,
-    "address": "Bastos, Rue 1234",
-    "city": "Yaoundé",
-    "neighborhood": "Bastos",
-    "latitude": "3.8667",
-    "longitude": "11.5167",
-    "phone": "+237683264591",
-    "email": "provider@example.com",
-    "phoneVerifiedAt": "2024-12-01T10:00:00Z",
-    "emailVerifiedAt": null,
-    "isActive": true,
-    "lastLoginAt": "2024-12-03T14:00:00Z",
-    "createdAt": "2024-11-01T10:00:00Z",
-    "verification": {
-      "status": "approved",
-      "verifiedAt": "2024-12-02T15:00:00Z"
-    },
-    "statistics": {
-      "averageRating": "4.85",
-      "totalReviews": 156,
-      "totalBookings": 342,
-      "totalCompleted": 320
-    },
-    "serviceSettings": {
-      "offersHomeService": true,
-      "homeServiceRadiusKm": 10,
-      "autoAcceptBookings": false,
-      "bookingAdvanceDays": 30
-    },
-    "createdAt": "2024-11-01T10:00:00Z",
-    "updatedAt": "2024-12-03T14:00:00Z"
-  }
-}
-```
 
 ---
 
@@ -1830,6 +1774,768 @@ DELETE /providers/availability/date/2025-12-17
 
 ---
 
+# � Provider Dashboard
+
+Tableau de bord du provider avec statistiques, revenus et aperçu des rendez-vous.
+
+**Périodes disponibles pour les filtres:**
+- `today` - Aujourd'hui
+- `week` - 7 derniers jours
+- `month` - 30 derniers jours (défaut)
+- `year` - 12 derniers mois
+- `custom` - Période personnalisée (startDate/endDate requis)
+
+---
+
+## 1. Dashboard Summary
+
+**Endpoint:** `GET /providers/dashboard/summary`
+
+**Description:** Résumé global du dashboard : statistiques, RDV du jour, et compteur de RDV en attente.
+
+**Auth Required:** ✅ Oui (JWT Bearer + Role: provider)
+
+**Headers:**
+```
+Authorization: Bearer <accessToken>
+```
+
+**Response Success (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "statistics": {
+      "averageRating": "4.85",
+      "totalReviews": 156,
+      "totalBookings": 342,
+      "totalCompleted": 320,
+      "totalCancelled": 12,
+      "completionRate": 94
+    },
+    "today": {
+      "appointments": [
+        {
+          "id": 45,
+          "scheduledAt": "2025-01-15T10:00:00.000Z",
+          "status": "confirmed",
+          "durationMinutes": 180,
+          "priceFcfa": 15000,
+          "service": {
+            "id": 1,
+            "name": "Tresses Box Braids"
+          },
+          "clientPhone": "+237655443322"
+        }
+      ],
+      "count": 3
+    },
+    "pendingCount": 5
+  }
+}
+```
+
+---
+
+## 2. Statistics
+
+**Endpoint:** `GET /providers/dashboard/statistics`
+
+**Description:** Statistiques globales du provider (rating, reviews, bookings).
+
+**Auth Required:** ✅ Oui (JWT Bearer + Role: provider)
+
+**Headers:**
+```
+Authorization: Bearer <accessToken>
+```
+
+**Response Success (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "averageRating": "4.85",
+    "totalReviews": 156,
+    "totalBookings": 342,
+    "totalCompleted": 320,
+    "totalCancelled": 12,
+    "completionRate": 94
+  }
+}
+```
+
+---
+
+## 3. Revenue Stats
+
+**Endpoint:** `GET /providers/dashboard/revenue`
+
+**Description:** Statistiques de revenus avec graphique par jour.
+
+**Auth Required:** ✅ Oui (JWT Bearer + Role: provider)
+
+**Headers:**
+```
+Authorization: Bearer <accessToken>
+```
+
+**Query Parameters:**
+| Paramètre | Type | Obligatoire | Description |
+|-----------|------|-------------|-------------|
+| `period` | string | Non | Période (today, week, month, year, custom). Défaut: month |
+| `startDate` | string | Non | Date début pour période custom (YYYY-MM-DD) |
+| `endDate` | string | Non | Date fin pour période custom (YYYY-MM-DD) |
+
+**Exemples:**
+```
+GET /providers/dashboard/revenue
+GET /providers/dashboard/revenue?period=week
+GET /providers/dashboard/revenue?period=custom&startDate=2025-01-01&endDate=2025-01-31
+```
+
+**Response Success (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "totalRevenue": 450000,
+    "appointmentsCount": 32,
+    "averagePerAppointment": 14063,
+    "period": {
+      "startDate": "2024-12-15",
+      "endDate": "2025-01-15"
+    },
+    "chart": [
+      { "date": "2025-01-10", "revenue": 45000, "count": 3 },
+      { "date": "2025-01-11", "revenue": 30000, "count": 2 },
+      { "date": "2025-01-12", "revenue": 0, "count": 0 },
+      { "date": "2025-01-13", "revenue": 60000, "count": 4 },
+      { "date": "2025-01-14", "revenue": 25000, "count": 2 },
+      { "date": "2025-01-15", "revenue": 15000, "count": 1 }
+    ]
+  }
+}
+```
+
+---
+
+## 4. Appointment Stats
+
+**Endpoint:** `GET /providers/dashboard/appointments`
+
+**Description:** Statistiques des rendez-vous par statut sur la période.
+
+**Auth Required:** ✅ Oui (JWT Bearer + Role: provider)
+
+**Headers:**
+```
+Authorization: Bearer <accessToken>
+```
+
+**Query Parameters:**
+| Paramètre | Type | Obligatoire | Description |
+|-----------|------|-------------|-------------|
+| `period` | string | Non | Période (today, week, month, year, custom). Défaut: month |
+| `startDate` | string | Non | Date début pour période custom (YYYY-MM-DD) |
+| `endDate` | string | Non | Date fin pour période custom (YYYY-MM-DD) |
+
+**Response Success (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "total": 45,
+    "byStatus": {
+      "pending": 5,
+      "confirmed": 8,
+      "in_progress": 2,
+      "completed": 28,
+      "cancelled": 2,
+      "no_show": 0
+    },
+    "period": {
+      "startDate": "2024-12-15",
+      "endDate": "2025-01-15"
+    }
+  }
+}
+```
+
+---
+
+## 5. Upcoming Appointments
+
+**Endpoint:** `GET /providers/dashboard/upcoming`
+
+**Description:** Liste des prochains rendez-vous confirmés ou en attente.
+
+**Auth Required:** ✅ Oui (JWT Bearer + Role: provider)
+
+**Headers:**
+```
+Authorization: Bearer <accessToken>
+```
+
+**Query Parameters:**
+| Paramètre | Type | Obligatoire | Description |
+|-----------|------|-------------|-------------|
+| `limit` | number | Non | Nombre de RDV à retourner (défaut: 5) |
+
+**Exemples:**
+```
+GET /providers/dashboard/upcoming
+GET /providers/dashboard/upcoming?limit=10
+```
+
+**Response Success (200):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 45,
+      "scheduledAt": "2025-01-15T10:00:00.000Z",
+      "status": "confirmed",
+      "durationMinutes": 180,
+      "priceFcfa": 15000,
+      "service": {
+        "id": 1,
+        "name": "Tresses Box Braids"
+      },
+      "clientPhone": "+237655443322"
+    },
+    {
+      "id": 46,
+      "scheduledAt": "2025-01-15T14:00:00.000Z",
+      "status": "pending",
+      "durationMinutes": 60,
+      "priceFcfa": 8000,
+      "service": {
+        "id": 3,
+        "name": "Manucure Gel"
+      },
+      "clientPhone": "+237699887766"
+    }
+  ]
+}
+```
+
+---
+
+## 6. Top Services
+
+**Endpoint:** `GET /providers/dashboard/top-services`
+
+**Description:** Services les plus populaires par nombre de réservations.
+
+**Auth Required:** ✅ Oui (JWT Bearer + Role: provider)
+
+**Headers:**
+```
+Authorization: Bearer <accessToken>
+```
+
+**Query Parameters:**
+| Paramètre | Type | Obligatoire | Description |
+|-----------|------|-------------|-------------|
+| `period` | string | Non | Période (today, week, month, year, custom). Défaut: month |
+| `startDate` | string | Non | Date début pour période custom (YYYY-MM-DD) |
+| `endDate` | string | Non | Date fin pour période custom (YYYY-MM-DD) |
+| `limit` | number | Non | Nombre de services (défaut: 5) |
+
+**Exemples:**
+```
+GET /providers/dashboard/top-services
+GET /providers/dashboard/top-services?period=year&limit=10
+```
+
+**Response Success (200):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "serviceId": 1,
+      "name": "Tresses Box Braids",
+      "price": "15000",
+      "bookingsCount": 45,
+      "totalRevenue": 675000
+    },
+    {
+      "serviceId": 3,
+      "name": "Manucure Gel",
+      "price": "8000",
+      "bookingsCount": 32,
+      "totalRevenue": 256000
+    },
+    {
+      "serviceId": 5,
+      "name": "Vanilles",
+      "price": "8000",
+      "bookingsCount": 28,
+      "totalRevenue": 224000
+    }
+  ]
+}
+```
+
+---
+
+## 7. Today's Appointments
+
+**Endpoint:** `GET /providers/dashboard/today`
+
+**Description:** Liste des rendez-vous prévus aujourd'hui.
+
+**Auth Required:** ✅ Oui (JWT Bearer + Role: provider)
+
+**Headers:**
+```
+Authorization: Bearer <accessToken>
+```
+
+**Response Success (200):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 45,
+      "scheduledAt": "2025-01-15T10:00:00.000Z",
+      "status": "confirmed",
+      "durationMinutes": 180,
+      "priceFcfa": 15000,
+      "service": {
+        "id": 1,
+        "name": "Tresses Box Braids"
+      },
+      "clientPhone": "+237655443322"
+    },
+    {
+      "id": 47,
+      "scheduledAt": "2025-01-15T15:00:00.000Z",
+      "status": "pending",
+      "durationMinutes": 90,
+      "priceFcfa": 10000,
+      "service": {
+        "id": 2,
+        "name": "Locks Entretien"
+      },
+      "clientPhone": "+237677889900"
+    }
+  ]
+}
+```
+
+---
+
+# �📅 Appointments Module
+
+Gestion des rendez-vous entre clients et providers.
+
+**Statuts possibles:**
+- `pending` - En attente de confirmation
+- `confirmed` - Confirmé par le provider
+- `in_progress` - En cours
+- `completed` - Terminé
+- `cancelled` - Annulé
+- `no_show` - Client absent
+
+**Transitions de statut valides:**
+- `pending` → `confirmed`, `cancelled`
+- `confirmed` → `in_progress`, `cancelled`, `no_show`
+- `in_progress` → `completed`, `cancelled`
+- `completed`, `cancelled`, `no_show` → (états finaux)
+
+---
+
+## 1. Create Appointment (Client)
+
+**Endpoint:** `POST /appointments`
+
+**Description:** Créer un rendez-vous. Le client réserve un créneau chez un provider.
+
+**Auth Required:** ✅ Oui (JWT Bearer + Role: client)
+
+**Headers:**
+```
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+```
+
+**Body (JSON):**
+```json
+{
+  "serviceId": 1,                           // OBLIGATOIRE - ID du service
+  "scheduledAt": "2025-01-15T10:00:00Z"     // OBLIGATOIRE - Date/heure du RDV (ISO 8601)
+}
+```
+
+**Validation:**
+- `serviceId`: Service actif existant
+- `scheduledAt`: Date dans le futur, pas de chevauchement avec RDV existants
+
+**Response Success (201):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "scheduledAt": "2025-01-15T10:00:00.000Z",
+    "status": "pending",
+    "priceFcfa": 15000,
+    "durationMinutes": 180,
+    "service": {
+      "id": 1,
+      "name": "Tresses Box Braids"
+    },
+    "provider": {
+      "id": 3,
+      "businessName": "Salon Afro Beauty",
+      "location": "Bastos, Yaoundé"
+    },
+    "createdAt": "2025-01-10T14:00:00.000Z"
+  }
+}
+```
+
+**Response Error (409 - Chevauchement):**
+```json
+{
+  "success": false,
+  "statusCode": 409,
+  "code": "CONFLICT",
+  "message": "Ce créneau chevauche un rendez-vous existant (2025-01-15T09:00:00.000Z - 2025-01-15T12:00:00.000Z)"
+}
+```
+
+**Response Error (400 - Date passée):**
+```json
+{
+  "success": false,
+  "statusCode": 400,
+  "code": "BAD_REQUEST",
+  "message": "La date du rendez-vous doit être dans le futur"
+}
+```
+
+---
+
+## 2. List My Appointments (Client)
+
+**Endpoint:** `GET /appointments/my`
+
+**Description:** Liste des rendez-vous du client connecté avec filtres et pagination.
+
+**Auth Required:** ✅ Oui (JWT Bearer + Role: client)
+
+**Headers:**
+```
+Authorization: Bearer <accessToken>
+```
+
+**Query Parameters:**
+| Paramètre | Type | Obligatoire | Description |
+|-----------|------|-------------|-------------|
+| `status` | string | Non | Filtrer par statut (pending, confirmed, completed, cancelled) |
+| `startDate` | string | Non | Date début (YYYY-MM-DD) |
+| `endDate` | string | Non | Date fin (YYYY-MM-DD) |
+| `page` | number | Non | Numéro de page (défaut: 1) |
+| `limit` | number | Non | Nombre par page (défaut: 10) |
+
+**Exemples:**
+```
+GET /appointments/my
+GET /appointments/my?status=pending
+GET /appointments/my?startDate=2025-01-01&endDate=2025-01-31
+GET /appointments/my?page=2&limit=5
+```
+
+**Response Success (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "appointments": [
+      {
+        "id": 1,
+        "scheduledAt": "2025-01-15T10:00:00.000Z",
+        "status": "confirmed",
+        "priceFcfa": 15000,
+        "durationMinutes": 180,
+        "service": {
+          "id": 1,
+          "name": "Tresses Box Braids",
+          "price": "15000"
+        },
+        "provider": {
+          "id": 3,
+          "businessName": "Salon Afro Beauty",
+          "location": "Bastos, Yaoundé"
+        }
+      }
+    ],
+    "pagination": {
+      "total": 5,
+      "page": 1,
+      "limit": 10,
+      "totalPages": 1
+    }
+  }
+}
+```
+
+---
+
+## 3. List Provider Appointments (Provider)
+
+**Endpoint:** `GET /appointments/provider`
+
+**Description:** Liste des rendez-vous du provider connecté avec filtres et pagination.
+
+**Auth Required:** ✅ Oui (JWT Bearer + Role: provider)
+
+**Headers:**
+```
+Authorization: Bearer <accessToken>
+```
+
+**Query Parameters:**
+| Paramètre | Type | Obligatoire | Description |
+|-----------|------|-------------|-------------|
+| `status` | string | Non | Filtrer par statut |
+| `startDate` | string | Non | Date début (YYYY-MM-DD) |
+| `endDate` | string | Non | Date fin (YYYY-MM-DD) |
+| `page` | number | Non | Numéro de page (défaut: 1) |
+| `limit` | number | Non | Nombre par page (défaut: 10) |
+
+**Response Success (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "appointments": [
+      {
+        "id": 1,
+        "scheduledAt": "2025-01-15T10:00:00.000Z",
+        "status": "pending",
+        "priceFcfa": 15000,
+        "durationMinutes": 180,
+        "service": {
+          "id": 1,
+          "name": "Tresses Box Braids",
+          "price": "15000"
+        },
+        "client": {
+          "id": 5,
+          "phone": "+237655443322",
+          "email": null
+        }
+      }
+    ],
+    "pagination": {
+      "total": 12,
+      "page": 1,
+      "limit": 10,
+      "totalPages": 2
+    }
+  }
+}
+```
+
+---
+
+## 4. Get Appointment Details
+
+**Endpoint:** `GET /appointments/:id`
+
+**Description:** Récupérer les détails complets d'un rendez-vous. Accessible par le client propriétaire ou le provider concerné.
+
+**Auth Required:** ✅ Oui (JWT Bearer + Role: client ou provider)
+
+**Headers:**
+```
+Authorization: Bearer <accessToken>
+```
+
+**Path Parameters:**
+- `id` (obligatoire): ID du rendez-vous
+
+**Response Success (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "scheduledAt": "2025-01-15T10:00:00.000Z",
+    "status": "confirmed",
+    "priceFcfa": 15000,
+    "durationMinutes": 180,
+    "service": {
+      "id": 1,
+      "name": "Tresses Box Braids",
+      "description": "Tresses africaines traditionnelles",
+      "price": "15000",
+      "duration": 180
+    },
+    "provider": {
+      "id": 3,
+      "businessName": "Salon Afro Beauty",
+      "city": "Yaoundé",
+      "neighborhood": "Bastos"
+    },
+    "client": {
+      "id": 5,
+      "phone": "+237655443322",
+      "email": null
+    },
+    "confirmation": {
+      "confirmedAt": "2025-01-10T15:00:00.000Z"
+    },
+    "cancellation": null,
+    "createdAt": "2025-01-10T14:00:00.000Z",
+    "updatedAt": "2025-01-10T15:00:00.000Z"
+  }
+}
+```
+
+**Response Error (404):**
+```json
+{
+  "success": false,
+  "statusCode": 404,
+  "code": "NOT_FOUND",
+  "message": "Rendez-vous non trouvé"
+}
+```
+
+---
+
+## 5. Update Appointment Status (Provider)
+
+**Endpoint:** `PATCH /appointments/:id/status`
+
+**Description:** Le provider confirme, démarre, termine ou annule un rendez-vous.
+
+**Auth Required:** ✅ Oui (JWT Bearer + Role: provider)
+
+**Headers:**
+```
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+```
+
+**Path Parameters:**
+- `id` (obligatoire): ID du rendez-vous
+
+**Body (JSON):**
+```json
+{
+  "status": "confirmed",              // OBLIGATOIRE - Nouveau statut
+  "cancellationReason": "string"      // OBLIGATOIRE si status=cancelled
+}
+```
+
+**Statuts possibles:**
+- `confirmed` - Confirmer le RDV
+- `in_progress` - Démarrer le RDV
+- `completed` - Terminer le RDV
+- `cancelled` - Annuler (raison obligatoire)
+- `no_show` - Client absent
+
+**Response Success (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "status": "confirmed",
+    "updatedAt": "2025-01-10T15:00:00.000Z"
+  }
+}
+```
+
+**Response Error (400 - Transition invalide):**
+```json
+{
+  "success": false,
+  "statusCode": 400,
+  "code": "BAD_REQUEST",
+  "message": "Transition de statut invalide: completed → confirmed"
+}
+```
+
+**Response Error (400 - Raison manquante):**
+```json
+{
+  "success": false,
+  "statusCode": 400,
+  "code": "BAD_REQUEST",
+  "message": "La raison d'annulation est obligatoire"
+}
+```
+
+---
+
+## 6. Cancel Appointment (Client)
+
+**Endpoint:** `PATCH /appointments/:id/cancel`
+
+**Description:** Le client annule son rendez-vous. Doit être fait au minimum 24h avant le rendez-vous.
+
+**Auth Required:** ✅ Oui (JWT Bearer + Role: client)
+
+**Headers:**
+```
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+```
+
+**Path Parameters:**
+- `id` (obligatoire): ID du rendez-vous
+
+**Body (JSON):**
+```json
+{
+  "reason": "Empêchement personnel"    // OBLIGATOIRE - Raison de l'annulation
+}
+```
+
+**Response Success (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "status": "cancelled",
+    "message": "Rendez-vous annulé avec succès"
+  }
+}
+```
+
+**Response Error (400 - Délai insuffisant):**
+```json
+{
+  "success": false,
+  "statusCode": 400,
+  "code": "BAD_REQUEST",
+  "message": "Annulation impossible moins de 24h avant le rendez-vous"
+}
+```
+
+**Response Error (400 - Déjà annulé):**
+```json
+{
+  "success": false,
+  "statusCode": 400,
+  "code": "BAD_REQUEST",
+  "message": "Rendez-vous déjà annulé"
+}
+```
+
+---
+
 # 🏢 Business Types
 
 ## 1. List Business Types
@@ -1961,12 +2667,14 @@ Accept-Language: fr    // Langue souhaitée (fr, en). Défaut: fr
 | Module | Endpoints | Auth Required |
 |--------|-----------|---------------|
 | **Auth** | 7 | 2/7 |
-| **Provider Profile** | 3 | 2/3 |
-| **Provider Services** | 7 | 6/7 |
+| **Provider Profile** | 2 | 2/2 |
+| **Provider Services** | 7 | 5/7 |
 | **Provider Specialties** | 5 | 5/5 |
 | **Provider Availability** | 6 | 6/6 |
+| **Provider Dashboard** | 7 | 7/7 |
 | **Business Types** | 1 | 0/1 |
-| **TOTAL** | **29** | **21/29** |
+| **Appointments** | 6 | 6/6 |
+| **TOTAL** | **41** | **33/41** |
 
 ## Codes d'Erreur Communs
 
@@ -2055,6 +2763,6 @@ Set-Cookie: refreshToken=...; HttpOnly; Secure; SameSite=Strict
 
 **Documentation générée le:** 2025-12-05
 
-**Dernière mise à jour:** 2025-12-07 - Support multilingue (i18n) pour Business Types et Service Categories
+**Dernière mise à jour:** 2025-12-28 - Ajout modules Appointments et Provider Dashboard
 
 **Version API:** 1.0.0

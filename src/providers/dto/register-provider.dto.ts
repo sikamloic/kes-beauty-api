@@ -6,8 +6,12 @@ import {
   Validate,
   ValidatorConstraint,
   ValidatorConstraintInterface,
+  IsIn,
 } from 'class-validator';
-import { PhoneUtil } from '../../common';
+import { PhoneUtil, IsStrongPassword } from '../../common';
+
+/** Villes disponibles pour l'inscription */
+const AVAILABLE_CITIES = ['Douala', 'Yaoundé', 'Bafoussam', 'Bamenda', 'Garoua', 'Autre'] as const;
 
 /**
  * Validateur personnalisé pour numéros de téléphone camerounais
@@ -51,21 +55,22 @@ export class RegisterProviderDto {
   phone!: string;
 
   @ApiProperty({
-    description: 'Mot de passe (minimum 6 caractères)',
-    example: 'Password123',
-    minLength: 6,
+    description: 'Mot de passe sécurisé (8+ caractères, 1 majuscule, 1 minuscule, 1 chiffre, 1 caractère spécial)',
+    example: 'Password123!',
+    minLength: 8,
   })
   @IsString()
   @IsNotEmpty({ message: 'Le mot de passe est requis' })
-  @Length(6, 100, { message: 'Le mot de passe doit contenir au moins 6 caractères' })
+  @IsStrongPassword()
   password!: string;
 
   @ApiProperty({
     description: 'Ville d\'activité',
     example: 'Douala',
-    enum: ['Douala', 'Yaoundé', 'Bafoussam', 'Bamenda', 'Garoua', 'Autre'],
+    enum: AVAILABLE_CITIES,
   })
   @IsString()
   @IsNotEmpty({ message: 'La ville est requise' })
+  @IsIn(AVAILABLE_CITIES, { message: 'Ville invalide. Choisissez parmi: Douala, Yaoundé, Bafoussam, Bamenda, Garoua, Autre' })
   city!: string;
 }

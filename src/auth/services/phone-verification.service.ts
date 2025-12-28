@@ -1,4 +1,5 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { randomInt } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PhoneValidationService } from '../../common';
 
@@ -182,9 +183,10 @@ export class PhoneVerificationService {
 
   /**
    * Générer un code de vérification à 6 chiffres
+   * Utilise crypto.randomInt() pour une génération cryptographiquement sécurisée
    */
   private generateVerificationCode(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    return randomInt(100000, 999999).toString();
   }
 
   /**

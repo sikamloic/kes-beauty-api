@@ -5,11 +5,13 @@ import { ProviderServicesService } from './services/provider-services.service';
 import { ProviderSpecialtiesService } from './services/provider-specialties.service';
 import { ProviderAvailabilityService } from './services/provider-availability.service';
 import { AppointmentsService } from './services/appointments.service';
+import { ProviderDashboardService } from './services/provider-dashboard.service';
 import { ProviderServicesController } from './controllers/provider-services.controller';
 import { ProviderSpecialtiesController } from './controllers/provider-specialties.controller';
 import { ProviderAvailabilityController } from './controllers/provider-availability.controller';
 import { AppointmentsController } from './controllers/appointments.controller';
 import { BusinessTypesController } from './controllers/business-types.controller';
+import { ProviderDashboardController } from './controllers/provider-dashboard.controller';
 import {
   ProviderValidatorService,
   ProviderRepositoryService,
@@ -39,6 +41,7 @@ import { AuthModule } from '../auth';
     ProviderSpecialtiesService,
     ProviderAvailabilityService,
     AppointmentsService,
+    ProviderDashboardService,
   ],
   controllers: [
     ProvidersController,
@@ -47,6 +50,7 @@ import { AuthModule } from '../auth';
     ProviderAvailabilityController,
     AppointmentsController,
     BusinessTypesController,
+    ProviderDashboardController,
   ],
   exports: [
     // Exporter pour autres modules si besoin
