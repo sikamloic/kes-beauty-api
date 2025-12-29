@@ -153,10 +153,13 @@ export class PhoneVerificationService {
       );
     }
 
-    // Code valide! Marquer le téléphone comme vérifié
+    // Code valide! Marquer le téléphone comme vérifié ET activer le compte
     await this.prisma.user.update({
       where: { phone: normalizedPhone },
-      data: { phoneVerifiedAt: new Date() },
+      data: { 
+        phoneVerifiedAt: new Date(),
+        isActive: true, // Activer le compte après vérification
+      },
     });
 
     // Marquer le code comme utilisé

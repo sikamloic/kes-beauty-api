@@ -10,22 +10,24 @@ Documentation des fonctionnalités pour les utilisateurs **clients** de l'applic
 
 1. [Vue d'ensemble](#vue-densemble)
 2. [Parcours Utilisateur](#parcours-utilisateur)
-3. [Recherche Providers](#recherche-providers)
+3. [Inscription](#inscription)
+   - [Créer un compte client](#créer-un-compte-client)
+4. [Recherche Providers](#recherche-providers)
    - [Rechercher des providers](#1-rechercher-des-providers)
    - [Providers populaires](#2-providers-populaires)
    - [Providers à proximité](#3-providers-à-proximité)
    - [Détails d'un provider](#4-détails-dun-provider)
    - [Services d'un provider](#5-services-dun-provider)
    - [Disponibilités d'un provider](#6-disponibilités-dun-provider)
-4. [Rendez-vous](#rendez-vous)
+5. [Rendez-vous](#rendez-vous)
    - [Créer un rendez-vous](#1-créer-un-rendez-vous)
    - [Mes rendez-vous](#2-mes-rendez-vous)
    - [Détails d'un rendez-vous](#3-détails-dun-rendez-vous)
    - [Annuler un rendez-vous](#4-annuler-un-rendez-vous)
-5. [Références](#références)
+6. [Références](#références)
    - [Business Types](#business-types)
    - [Catégories de services](#catégories-de-services)
-6. [Codes d'erreur](#codes-derreur)
+7. [Codes d'erreur](#codes-derreur)
 
 ---
 
@@ -35,15 +37,16 @@ Documentation des fonctionnalités pour les utilisateurs **clients** de l'applic
 
 | Fonctionnalité | Description | Endpoints |
 |----------------|-------------|-----------|
+| **Inscription** | Créer un compte client | 1 |
 | **Recherche Providers** | Trouver et consulter providers | 6 |
 | **Rendez-vous** | Réserver, consulter, annuler | 4 |
 | **Références** | Business types, catégories | 2 |
 
-**Total: 12 endpoints**
+**Total: 13 endpoints**
 
 ### Authentification
 
-**Endpoints publics (recherche):** Aucune authentification requise.
+**Endpoints publics (inscription, recherche):** Aucune authentification requise.
 
 **Endpoints authentifiés (rendez-vous):** Token JWT avec rôle `client`.
 
@@ -55,31 +58,130 @@ Authorization: Bearer <accessToken>
 
 ## Parcours Utilisateur
 
-### Réservation d'un service
+### Inscription et première réservation
 
 ```
-1. Rechercher un provider
+1. Créer un compte
+   └── POST /clients/register (nom, téléphone, mot de passe)
+
+2. Vérifier le téléphone
+   └── POST /auth/send-verification-code
+   └── POST /auth/verify-phone
+
+3. Se connecter
+   └── POST /auth/login
+
+4. Rechercher un provider
    └── GET /search/providers (recherche avec filtres)
    └── GET /search/providers/popular (providers populaires)
    └── GET /search/providers/nearby (par géolocalisation)
 
-2. Consulter le provider
+5. Consulter le provider
    └── GET /search/providers/:id (détails du provider)
    └── GET /search/providers/:id/services (ses services)
 
-3. Vérifier les disponibilités
+6. Vérifier les disponibilités
    └── GET /search/providers/:id/availability (créneaux libres)
 
-4. Créer le rendez-vous
+7. Créer le rendez-vous
    └── POST /appointments
 
-5. Suivre le rendez-vous
+8. Suivre le rendez-vous
    └── GET /appointments/my
    └── GET /appointments/:id
 
-6. Annuler si nécessaire (24h avant)
+9. Annuler si nécessaire (24h avant)
    └── PATCH /appointments/:id/cancel
 ```
+
+---
+
+## Inscription
+
+### Créer un compte client
+
+Inscription rapide avec informations minimales.
+
+**Endpoint:** `POST /clients/register`
+
+**Auth Required:** ❌ Non
+
+**Rate Limit:** 5 requêtes/minute
+
+#### Request Body
+
+| Champ | Type | Requis | Description |
+|-------|------|--------|-------------|
+| `firstName` | string | ✅ | Prénom (2-100 caractères) |
+| `lastName` | string | ❌ | Nom de famille (optionnel) |
+| `phone` | string | ✅ | Téléphone camerounais |
+| `password` | string | ✅ | Mot de passe sécurisé |
+| `email` | string | ❌ | Email (optionnel) |
+
+#### Formats téléphone acceptés
+
+- `+237655443322`
+- `237655443322`
+- `00237655443322`
+- `655443322`
+
+#### Règles mot de passe
+
+- Minimum 8 caractères
+- Au moins 1 majuscule
+- Au moins 1 minuscule
+- Au moins 1 chiffre
+- Au moins 1 caractère spécial (!@#$%^&*)
+
+#### Exemple Request
+
+```json
+{
+  "firstName": "Jean",
+  "lastName": "Kamga",
+  "phone": "+237655443322",
+  "password": "Password123!",
+  "email": "jean.kamga@email.com"
+}
+```
+
+#### Response Success (201)
+
+```json
+{
+  "success": true,
+  "data": {
+    "user": {
+      "clientId": 1,
+      "firstName": "Jean",
+      "lastName": "Kamga",
+      "phone": "+237655443322",
+      "status": "pending_verification"
+    },
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "expiresIn": 900,
+    "message": "Inscription réussie! Prochaine étape: vérifiez votre téléphone par SMS."
+  }
+}
+```
+
+#### Response Error (409 - Conflit)
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "CONFLICT",
+    "message": "Ce numéro de téléphone est déjà utilisé"
+  }
+}
+```
+
+#### Prochaines étapes après inscription
+
+1. **Vérifier le téléphone:** `POST /auth/send-verification-code`
+2. **Valider le code SMS:** `POST /auth/verify-phone`
+3. **Se connecter:** `POST /auth/login`
 
 ---
 

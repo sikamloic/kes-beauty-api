@@ -14,6 +14,7 @@ Documentation des fonctionnalités pour les **prestataires de services** (provid
 4. [Profil](#profil)
    - [Consulter mon profil](#1-consulter-mon-profil)
    - [Mettre à jour mon profil](#2-mettre-à-jour-mon-profil)
+   - [Taux de complétion](#3-taux-de-complétion)
 5. [Services](#services)
    - [Créer un service](#1-créer-un-service)
    - [Lister mes services](#2-lister-mes-services)
@@ -55,14 +56,14 @@ Documentation des fonctionnalités pour les **prestataires de services** (provid
 
 | Module | Description | Endpoints |
 |--------|-------------|-----------|
-| **Profil** | Gestion du profil business | 2 |
+| **Profil** | Gestion du profil business | 3 |
 | **Services** | Catalogue de prestations | 7 |
 | **Spécialités** | Domaines d'expertise | 5 |
 | **Disponibilités** | Gestion des créneaux | 6 |
 | **Rendez-vous** | Gestion des réservations | 3 |
 | **Dashboard** | Statistiques et suivi | 7 |
 
-**Total: 30 endpoints**
+**Total: 31 endpoints**
 
 ### Authentification
 
@@ -281,6 +282,100 @@ Crée un nouveau compte provider.
   }
 }
 ```
+
+---
+
+### 3. Taux de complétion
+
+Permet au provider de connaître son taux de complétion de profil et les étapes restantes pour être pleinement opérationnel.
+
+**Endpoint:** `GET /providers/profile/completion`
+
+**Auth Required:** ✅ Oui (Role: `provider`)
+
+#### Response Success (200)
+
+```json
+{
+  "success": true,
+  "data": {
+    "percentage": 65,
+    "status": "basic",
+    "canReceiveBookings": false,
+    "isVisible": false,
+    "criteria": [
+      {
+        "key": "business_name",
+        "label": "Nom du business",
+        "description": "Nom de votre salon ou activité",
+        "weight": 10,
+        "isCompleted": true,
+        "isRequired": true,
+        "category": "basic"
+      },
+      {
+        "key": "phone_verified",
+        "label": "Téléphone vérifié",
+        "description": "Vérification du numéro de téléphone par SMS",
+        "weight": 15,
+        "isCompleted": true,
+        "isRequired": true,
+        "category": "verification"
+      },
+      {
+        "key": "has_services",
+        "label": "Services créés",
+        "description": "Au moins un service actif avec prix et durée",
+        "weight": 15,
+        "isCompleted": false,
+        "isRequired": true,
+        "category": "services"
+      }
+    ],
+    "nextSteps": [
+      "🔴 Services créés: Au moins un service actif avec prix et durée",
+      "🔴 Disponibilités définies: Créneaux horaires disponibles pour les réservations",
+      "🔴 Compte approuvé: Validation de votre compte par notre équipe",
+      "🟡 Biographie: Description de votre activité et expertise",
+      "🟡 Géolocalisation: Coordonnées GPS pour la recherche par proximité"
+    ],
+    "summary": {
+      "completed": 8,
+      "total": 16,
+      "requiredCompleted": 3,
+      "requiredTotal": 6
+    }
+  }
+}
+```
+
+#### Critères de complétion
+
+| Catégorie | Critères | Poids total |
+|-----------|----------|-------------|
+| **basic** | Nom, ville, type, bio, quartier, adresse, géoloc, expérience | 48% |
+| **verification** | Téléphone vérifié, compte approuvé, pièce d'identité | 35% |
+| **services** | Services créés, disponibilités, spécialités | 30% |
+| **visibility** | Email, portfolio | 7% |
+
+#### Statuts
+
+| Status | Pourcentage | Description |
+|--------|-------------|-------------|
+| `incomplete` | < 50% | Profil incomplet, actions requises |
+| `basic` | 50-69% | Profil basique, améliorations possibles |
+| `good` | 70-89% | Bon profil, quelques optimisations |
+| `excellent` | ≥ 90% | Profil complet et optimisé |
+
+#### Conditions pour recevoir des réservations
+
+Pour `canReceiveBookings: true`, tous les critères **requis** doivent être complétés :
+- ✅ Nom du business
+- ✅ Ville
+- ✅ Téléphone vérifié
+- ✅ Compte approuvé
+- ✅ Au moins 1 service actif
+- ✅ Disponibilités définies
 
 ---
 

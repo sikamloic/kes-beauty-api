@@ -219,14 +219,19 @@ export class ProvidersService {
   /**
    * Créer l'utilisateur
    * SRP: Création user uniquement
+   * 
+   * En mode dev (SKIP_PHONE_VERIFICATION=true), le compte est activé directement
    */
   private async createUser(tx: any, data: { phone: string; passwordHash: string }) {
+    const skipVerification = process.env.SKIP_PHONE_VERIFICATION === 'true';
+    
     return tx.user.create({
       data: {
         phone: data.phone,
         email: null,
         passwordHash: data.passwordHash,
-        isActive: false,
+        isActive: skipVerification, // Activé directement en mode dev
+        phoneVerifiedAt: skipVerification ? new Date() : null,
       },
     });
   }

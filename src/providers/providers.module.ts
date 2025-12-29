@@ -6,6 +6,7 @@ import { ProviderSpecialtiesService } from './services/provider-specialties.serv
 import { ProviderAvailabilityService } from './services/provider-availability.service';
 import { AppointmentsService } from './services/appointments.service';
 import { ProviderDashboardService } from './services/provider-dashboard.service';
+import { ProfileCompletionService } from './services/profile-completion.service';
 import { ProviderServicesController } from './controllers/provider-services.controller';
 import { ProviderSpecialtiesController } from './controllers/provider-specialties.controller';
 import { ProviderAvailabilityController } from './controllers/provider-availability.controller';
@@ -42,6 +43,7 @@ import { AuthModule } from '../auth';
     ProviderAvailabilityService,
     AppointmentsService,
     ProviderDashboardService,
+    ProfileCompletionService,
   ],
   controllers: [
     ProvidersController,
