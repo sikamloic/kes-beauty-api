@@ -318,55 +318,76 @@ export class ProviderDashboardService {
   }
 
   /**
-   * Calculer la plage de dates selon la période
+   * Calculer la plage de dates selon la période (calendaire)
+   * 
+   * - TODAY: Aujourd'hui (00:00 - 23:59)
+   * - WEEK: Semaine calendaire en cours (lundi - dimanche)
+   * - MONTH: Mois calendaire en cours (1er - dernier jour)
+   * - YEAR: Année calendaire en cours (1er jan - 31 déc)
+   * - CUSTOM: Dates personnalisées
    */
   private getDateRange(filters: DashboardFiltersDto): { startDate: Date; endDate: Date } {
     const now = new Date();
     let startDate: Date;
-    let endDate: Date = new Date(now);
-    endDate.setHours(23, 59, 59, 999);
+    let endDate: Date;
 
     switch (filters.period) {
       case DashboardPeriod.TODAY:
         startDate = new Date(now);
         startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(now);
+        endDate.setHours(23, 59, 59, 999);
         break;
 
       case DashboardPeriod.WEEK:
+        // Semaine calendaire (lundi = 1, dimanche = 0)
+        const dayOfWeek = now.getDay();
+        const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
         startDate = new Date(now);
-        startDate.setDate(now.getDate() - 7);
+        startDate.setDate(now.getDate() + diffToMonday);
         startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(startDate);
+        endDate.setDate(startDate.getDate() + 6);
+        endDate.setHours(23, 59, 59, 999);
         break;
 
       case DashboardPeriod.MONTH:
-        startDate = new Date(now);
-        startDate.setMonth(now.getMonth() - 1);
+        // Mois calendaire en cours (1er au dernier jour)
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
         startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        endDate.setHours(23, 59, 59, 999);
         break;
 
       case DashboardPeriod.YEAR:
-        startDate = new Date(now);
-        startDate.setFullYear(now.getFullYear() - 1);
+        // Année calendaire en cours (1er jan - 31 déc)
+        startDate = new Date(now.getFullYear(), 0, 1);
         startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(now.getFullYear(), 11, 31);
+        endDate.setHours(23, 59, 59, 999);
         break;
 
       case DashboardPeriod.CUSTOM:
         if (filters.startDate && filters.endDate) {
           startDate = new Date(filters.startDate);
+          startDate.setHours(0, 0, 0, 0);
           endDate = new Date(filters.endDate);
           endDate.setHours(23, 59, 59, 999);
         } else {
-          // Fallback to month if custom dates not provided
-          startDate = new Date(now);
-          startDate.setMonth(now.getMonth() - 1);
+          // Fallback au mois en cours
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
           startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+          endDate.setHours(23, 59, 59, 999);
         }
         break;
 
       default:
-        startDate = new Date(now);
-        startDate.setMonth(now.getMonth() - 1);
+        // Défaut: mois en cours
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
         startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        endDate.setHours(23, 59, 59, 999);
     }
 
     return { startDate, endDate };

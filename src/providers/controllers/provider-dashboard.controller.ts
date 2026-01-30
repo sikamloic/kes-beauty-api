@@ -6,11 +6,12 @@ import {
   UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { ProviderDashboardService } from '../services/provider-dashboard.service';
 import { DashboardFiltersDto } from '../dto';
-import { JwtAuthGuard, Roles, RolesGuard } from '../../common';
+import { JwtAuthGuard, Roles, RolesGuard, AuthenticatedRequest } from '../../common';
 
 /**
  * Contrôleur Dashboard Provider
@@ -25,6 +26,16 @@ export class ProviderDashboardController {
   constructor(private readonly dashboardService: ProviderDashboardService) {}
 
   /**
+   * Valider que le providerId est présent dans le token
+   */
+  private validateProviderId(req: AuthenticatedRequest): number {
+    if (!req.user?.providerId) {
+      throw new UnauthorizedException('Provider ID manquant dans le token');
+    }
+    return req.user.providerId;
+  }
+
+  /**
    * GET /providers/dashboard/summary
    * Résumé global du dashboard
    */
@@ -33,8 +44,9 @@ export class ProviderDashboardController {
     summary: 'Résumé du dashboard',
     description: 'Statistiques globales, RDV du jour, et compteur de RDV en attente',
   })
-  async getSummary(@Req() req: any) {
-    return this.dashboardService.getSummary(req.user.providerId);
+  async getSummary(@Req() req: AuthenticatedRequest) {
+    const providerId = this.validateProviderId(req);
+    return this.dashboardService.getSummary(providerId);
   }
 
   /**
@@ -46,8 +58,9 @@ export class ProviderDashboardController {
     summary: 'Statistiques globales',
     description: 'Rating moyen, nombre de reviews, bookings, etc.',
   })
-  async getStatistics(@Req() req: any) {
-    return this.dashboardService.getStatistics(req.user.providerId);
+  async getStatistics(@Req() req: AuthenticatedRequest) {
+    const providerId = this.validateProviderId(req);
+    return this.dashboardService.getStatistics(providerId);
   }
 
   /**
@@ -59,21 +72,23 @@ export class ProviderDashboardController {
     summary: 'Statistiques de revenus',
     description: 'Revenus totaux, par jour, moyenne par RDV',
   })
-  async getRevenueStats(@Req() req: any, @Query() filters: DashboardFiltersDto) {
-    return this.dashboardService.getRevenueStats(req.user.providerId, filters);
+  async getRevenueStats(@Req() req: AuthenticatedRequest, @Query() filters: DashboardFiltersDto) {
+    const providerId = this.validateProviderId(req);
+    return this.dashboardService.getRevenueStats(providerId, filters);
   }
 
   /**
-   * GET /providers/dashboard/appointments
+   * GET /providers/dashboard/appointment-stats
    * Statistiques des rendez-vous par statut
    */
-  @Get('appointments')
+  @Get('appointment-stats')
   @ApiOperation({
     summary: 'Statistiques des rendez-vous',
     description: 'Nombre de RDV par statut sur la période',
   })
-  async getAppointmentStats(@Req() req: any, @Query() filters: DashboardFiltersDto) {
-    return this.dashboardService.getAppointmentStats(req.user.providerId, filters);
+  async getAppointmentStats(@Req() req: AuthenticatedRequest, @Query() filters: DashboardFiltersDto) {
+    const providerId = this.validateProviderId(req);
+    return this.dashboardService.getAppointmentStats(providerId, filters);
   }
 
   /**
@@ -87,10 +102,11 @@ export class ProviderDashboardController {
   })
   @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Nombre de RDV (défaut: 5)' })
   async getUpcomingAppointments(
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Query('limit', new DefaultValuePipe(5), ParseIntPipe) limit: number,
   ) {
-    return this.dashboardService.getUpcomingAppointments(req.user.providerId, limit);
+    const providerId = this.validateProviderId(req);
+    return this.dashboardService.getUpcomingAppointments(providerId, limit);
   }
 
   /**
@@ -104,11 +120,12 @@ export class ProviderDashboardController {
   })
   @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Nombre de services (défaut: 5)' })
   async getTopServices(
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Query() filters: DashboardFiltersDto,
     @Query('limit', new DefaultValuePipe(5), ParseIntPipe) limit: number,
   ) {
-    return this.dashboardService.getTopServices(req.user.providerId, filters, limit);
+    const providerId = this.validateProviderId(req);
+    return this.dashboardService.getTopServices(providerId, filters, limit);
   }
 
   /**
@@ -120,7 +137,8 @@ export class ProviderDashboardController {
     summary: 'Rendez-vous du jour',
     description: 'Liste des RDV prévus aujourd\'hui',
   })
-  async getTodayAppointments(@Req() req: any) {
-    return this.dashboardService.getTodayAppointments(req.user.providerId);
+  async getTodayAppointments(@Req() req: AuthenticatedRequest) {
+    const providerId = this.validateProviderId(req);
+    return this.dashboardService.getTodayAppointments(providerId);
   }
 }

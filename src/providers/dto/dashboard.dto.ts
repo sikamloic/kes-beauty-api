@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsDateString, IsEnum } from 'class-validator';
+import { IsOptional, IsDateString, IsEnum, ValidateIf, IsNotEmpty } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 /**
@@ -15,6 +15,8 @@ export enum DashboardPeriod {
 
 /**
  * DTO pour les filtres du dashboard provider
+ * 
+ * Note: startDate et endDate sont requis si period = 'custom'
  */
 export class DashboardFiltersDto {
   @ApiPropertyOptional({
@@ -27,18 +29,20 @@ export class DashboardFiltersDto {
   period?: DashboardPeriod = DashboardPeriod.MONTH;
 
   @ApiPropertyOptional({
-    description: 'Date de début (pour période custom)',
+    description: 'Date de début (requis si period=custom)',
     example: '2025-01-01',
   })
-  @IsOptional()
+  @ValidateIf((o) => o.period === DashboardPeriod.CUSTOM)
+  @IsNotEmpty({ message: 'startDate est requis pour une période custom' })
   @IsDateString()
   startDate?: string;
 
   @ApiPropertyOptional({
-    description: 'Date de fin (pour période custom)',
+    description: 'Date de fin (requis si period=custom)',
     example: '2025-01-31',
   })
-  @IsOptional()
+  @ValidateIf((o) => o.period === DashboardPeriod.CUSTOM)
+  @IsNotEmpty({ message: 'endDate est requis pour une période custom' })
   @IsDateString()
   endDate?: string;
 }

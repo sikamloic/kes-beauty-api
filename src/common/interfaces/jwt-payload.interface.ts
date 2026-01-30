@@ -36,3 +36,10 @@ export interface JwtUser {
   providerId?: number;
   clientId?: number;
 }
+
+/**
+ * Request Express avec utilisateur authentifié
+ */
+export interface AuthenticatedRequest extends Request {
+  user: JwtUser;
+}
