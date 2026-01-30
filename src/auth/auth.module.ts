@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { RefreshTokenService, PhoneVerificationService } from './services';
+import { AuthService, RefreshTokenService, PhoneVerificationService } from './services';
 import { AuthController } from './auth.controller';
 
 /**
@@ -8,7 +8,7 @@ import { AuthController } from './auth.controller';
  */
 @Module({
   controllers: [AuthController],
-  providers: [RefreshTokenService, PhoneVerificationService],
-  exports: [RefreshTokenService, PhoneVerificationService],
+  providers: [AuthService, RefreshTokenService, PhoneVerificationService],
+  exports: [AuthService, RefreshTokenService, PhoneVerificationService],
 })
 export class AuthModule {}
