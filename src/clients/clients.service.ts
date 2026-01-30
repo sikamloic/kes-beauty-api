@@ -1,6 +1,6 @@
 import { Injectable, ConflictException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { SearchProvidersDto, ProviderSortBy, PublicAvailabilityDto, RegisterClientDto } from './dto';
+import { SearchProvidersDto, ProviderSortBy, PublicAvailabilityDto, RegisterClientDto, UpdateClientProfileDto } from './dto';
 import { NotFoundException, PhoneValidationService, JwtTokenService } from '../common';
 import { RefreshTokenService } from '../auth';
 import * as bcrypt from 'bcrypt';
@@ -198,6 +198,94 @@ export class ClientsService {
     };
   }
 
+  // ==================== PROFIL CLIENT ====================
+
+  /**
+   * Récupérer le profil du client connecté
+   */
+  async getProfile(userId: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        clientProfile: true,
+      },
+    });
+
+    if (!user || !user.clientProfile) {
+      throw new NotFoundException('Profil client non trouvé');
+    }
+
+    return {
+      id: user.clientProfile.id,
+      phone: user.phone,
+      phoneVerified: !!user.phoneVerifiedAt,
+      firstName: user.clientProfile.firstName,
+      lastName: user.clientProfile.lastName,
+      dateOfBirth: user.clientProfile.dateOfBirth,
+      preferences: user.clientProfile.preferences,
+      createdAt: user.clientProfile.createdAt,
+      updatedAt: user.clientProfile.updatedAt,
+    };
+  }
+
+  /**
+   * Mettre à jour le profil du client connecté
+   */
+  async updateProfile(userId: number, dto: UpdateClientProfileDto) {
+    // Vérifier que le profil existe
+    const clientProfile = await this.prisma.clientProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!clientProfile) {
+      throw new NotFoundException('Profil client non trouvé');
+    }
+
+    // Construire les données de mise à jour
+    const updateData: any = {};
+
+    if (dto.firstName !== undefined) {
+      updateData.firstName = dto.firstName;
+    }
+    if (dto.lastName !== undefined) {
+      updateData.lastName = dto.lastName;
+    }
+    if (dto.dateOfBirth !== undefined) {
+      updateData.dateOfBirth = new Date(dto.dateOfBirth);
+    }
+    if (dto.preferences !== undefined) {
+      updateData.preferences = dto.preferences;
+    }
+
+    // Mettre à jour le profil
+    const updated = await this.prisma.clientProfile.update({
+      where: { userId },
+      data: updateData,
+      include: {
+        user: {
+          select: {
+            phone: true,
+            phoneVerifiedAt: true,
+          },
+        },
+      },
+    });
+
+    this.logger.log(`Profil client mis à jour: userId=${userId}`);
+
+    return {
+      id: updated.id,
+      phone: updated.user.phone,
+      phoneVerified: !!updated.user.phoneVerifiedAt,
+      firstName: updated.firstName,
+      lastName: updated.lastName,
+      dateOfBirth: updated.dateOfBirth,
+      preferences: updated.preferences,
+      createdAt: updated.createdAt,
+      updatedAt: updated.updatedAt,
+    };
+  }
+
   // ==================== RECHERCHE ====================
 
   /**
@@ -213,6 +301,9 @@ export class ClientsService {
       minPrice,
       maxPrice,
       minRating,
+      availableNow,
+      homeService,
+      isVerified,
       sortBy,
       page = 1,
       limit = 10,
@@ -291,6 +382,21 @@ export class ClientsService {
       };
     }
 
+    // Filtre par service à domicile
+    if (homeService === true) {
+      where.serviceSettings = {
+        offersHomeService: true,
+      };
+    }
+
+    // Filtre par provider vérifié (identité)
+    if (isVerified === true) {
+      where.verification = {
+        ...where.verification,
+        identityVerified: true,
+      };
+    }
+
     // Définir l'ordre de tri
     let orderBy: any = {};
     switch (sortBy) {
@@ -306,6 +412,10 @@ export class ClientsService {
       default:
         orderBy = { statistics: { averageRating: 'desc' } };
     }
+
+    // Calculer la date/heure actuelle pour le filtre availableNow
+    const now = new Date();
+    const today = now.toISOString().split('T')[0] as string; // YYYY-MM-DD
 
     // Exécuter la requête
     const [providers, total] = await Promise.all([
@@ -342,6 +452,26 @@ export class ClientsService {
             orderBy: { price: 'asc' },
             take: 1,
           },
+          serviceSettings: {
+            select: {
+              offersHomeService: true,
+            },
+          },
+          verification: {
+            select: {
+              identityVerified: true,
+            },
+          },
+          availabilities: {
+            where: {
+              date: new Date(today),
+              isAvailable: true,
+            },
+            select: {
+              startTime: true,
+              endTime: true,
+            },
+          },
         },
         orderBy,
         skip,
@@ -350,8 +480,21 @@ export class ClientsService {
       this.prisma.providerProfile.count({ where }),
     ]);
 
+    // Fonction pour vérifier si le provider est disponible maintenant
+    const checkAvailableNow = (availabilities: { startTime: Date; endTime: Date }[]): boolean => {
+      if (availabilities.length === 0) return false;
+      
+      const currentTime = now.getHours() * 60 + now.getMinutes(); // Minutes depuis minuit
+      
+      return availabilities.some((slot) => {
+        const startMinutes = slot.startTime.getHours() * 60 + slot.startTime.getMinutes();
+        const endMinutes = slot.endTime.getHours() * 60 + slot.endTime.getMinutes();
+        return currentTime >= startMinutes && currentTime < endMinutes;
+      });
+    };
+
     // Formater les résultats avec les helpers
-    const formattedProviders = providers.map((provider) => ({
+    let formattedProviders = providers.map((provider: any) => ({
       id: provider.id,
       businessName: provider.businessName,
       bio: formatBio(provider.bio, 150),
@@ -363,11 +506,20 @@ export class ClientsService {
       specialties: formatSpecialties(provider.specialties),
       startingPrice: provider.services[0]?.price?.toString() || null,
       coordinates: formatCoordinates(provider.latitude, provider.longitude),
+      // Nouveaux champs
+      isAvailableNow: checkAvailableNow(provider.availabilities || []),
+      homeService: provider.serviceSettings?.offersHomeService || false,
+      isVerified: provider.verification?.identityVerified || false,
     }));
+
+    // Filtre post-requête pour availableNow (car nécessite calcul dynamique)
+    if (availableNow === true) {
+      formattedProviders = formattedProviders.filter((p) => p.isAvailableNow);
+    }
 
     return {
       providers: formattedProviders,
-      pagination: formatPagination(page, limit, total),
+      pagination: formatPagination(page, limit, availableNow ? formattedProviders.length : total),
     };
   }
 

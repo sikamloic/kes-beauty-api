@@ -4,11 +4,12 @@ import {
   IsString,
   IsNumber,
   IsEnum,
+  IsBoolean,
   Min,
   Max,
   IsDateString,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 
 /**
  * Tri des résultats de recherche
@@ -97,6 +98,24 @@ export class SearchProvidersDto {
   @IsOptional()
   @IsEnum(ProviderSortBy)
   sortBy?: ProviderSortBy = ProviderSortBy.RATING;
+
+  @ApiPropertyOptional({ description: 'Filtrer les providers disponibles maintenant' })
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  availableNow?: boolean;
+
+  @ApiPropertyOptional({ description: 'Filtrer les providers qui se déplacent à domicile' })
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  homeService?: boolean;
+
+  @ApiPropertyOptional({ description: 'Filtrer les providers vérifiés (identité confirmée)' })
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  isVerified?: boolean;
 
   @ApiPropertyOptional({ description: 'Page (défaut: 1)' })
   @IsOptional()

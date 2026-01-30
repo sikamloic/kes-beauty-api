@@ -12,22 +12,25 @@ Documentation des fonctionnalités pour les utilisateurs **clients** de l'applic
 2. [Parcours Utilisateur](#parcours-utilisateur)
 3. [Inscription](#inscription)
    - [Créer un compte client](#créer-un-compte-client)
-4. [Recherche Providers](#recherche-providers)
+4. [Profil Client](#profil-client)
+   - [Mon profil](#1-mon-profil)
+   - [Mettre à jour mon profil](#2-mettre-à-jour-mon-profil)
+5. [Recherche Providers](#recherche-providers)
    - [Rechercher des providers](#1-rechercher-des-providers)
    - [Providers populaires](#2-providers-populaires)
    - [Providers à proximité](#3-providers-à-proximité)
    - [Détails d'un provider](#4-détails-dun-provider)
    - [Services d'un provider](#5-services-dun-provider)
    - [Disponibilités d'un provider](#6-disponibilités-dun-provider)
-5. [Rendez-vous](#rendez-vous)
+6. [Rendez-vous](#rendez-vous)
    - [Créer un rendez-vous](#1-créer-un-rendez-vous)
    - [Mes rendez-vous](#2-mes-rendez-vous)
    - [Détails d'un rendez-vous](#3-détails-dun-rendez-vous)
    - [Annuler un rendez-vous](#4-annuler-un-rendez-vous)
-6. [Références](#références)
+7. [Références](#références)
    - [Business Types](#business-types)
    - [Catégories de services](#catégories-de-services)
-7. [Codes d'erreur](#codes-derreur)
+8. [Codes d'erreur](#codes-derreur)
 
 ---
 
@@ -38,11 +41,12 @@ Documentation des fonctionnalités pour les utilisateurs **clients** de l'applic
 | Fonctionnalité | Description | Endpoints |
 |----------------|-------------|-----------|
 | **Inscription** | Créer un compte client | 1 |
+| **Profil** | Consulter et modifier son profil | 2 |
 | **Recherche Providers** | Trouver et consulter providers | 6 |
 | **Rendez-vous** | Réserver, consulter, annuler | 4 |
 | **Références** | Business types, catégories | 2 |
 
-**Total: 13 endpoints**
+**Total: 15 endpoints**
 
 ### Authentification
 
@@ -185,6 +189,138 @@ Inscription rapide avec informations minimales.
 
 ---
 
+## Profil Client
+
+Endpoints pour consulter et modifier le profil du client connecté.
+
+### 1. Mon profil
+
+Récupérer les informations du profil client.
+
+**Endpoint:** `GET /clients/profile`
+
+**Auth Required:** ✅ Oui (Role: `client`)
+
+#### Headers
+
+```http
+Authorization: Bearer <accessToken>
+```
+
+#### Response Success (200)
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "phone": "+237655123456",
+    "phoneVerified": true,
+    "firstName": "Marie",
+    "lastName": "Dupont",
+    "dateOfBirth": "1990-05-15",
+    "preferences": {
+      "preferredCity": "Douala",
+      "notifications": { "sms": true, "email": false }
+    },
+    "createdAt": "2025-01-15T10:00:00.000Z",
+    "updatedAt": "2025-01-20T14:30:00.000Z"
+  }
+}
+```
+
+#### Response Errors
+
+| Code | Status | Description |
+|------|--------|-------------|
+| `UNAUTHORIZED` | 401 | Token manquant ou invalide |
+| `NOT_FOUND` | 404 | Profil client non trouvé |
+
+---
+
+### 2. Mettre à jour mon profil
+
+Modifier les informations du profil client.
+
+**Endpoint:** `PATCH /clients/profile`
+
+**Auth Required:** ✅ Oui (Role: `client`)
+
+#### Headers
+
+```http
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+```
+
+#### Request
+
+```json
+{
+  "firstName": "Marie",
+  "lastName": "Dupont",
+  "dateOfBirth": "1990-05-15",
+  "preferences": {
+    "preferredCity": "Douala",
+    "preferredCategories": [1, 2],
+    "notifications": { "sms": true, "email": false }
+  }
+}
+```
+
+| Champ | Type | Requis | Description |
+|-------|------|--------|-------------|
+| `firstName` | string | ❌ | Prénom (max 100 car.) |
+| `lastName` | string | ❌ | Nom de famille (max 100 car.) |
+| `dateOfBirth` | string | ❌ | Date de naissance (YYYY-MM-DD) |
+| `preferences` | object | ❌ | Préférences (JSON libre) |
+
+#### Response Success (200)
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "phone": "+237655123456",
+    "phoneVerified": true,
+    "firstName": "Marie",
+    "lastName": "Dupont",
+    "dateOfBirth": "1990-05-15",
+    "preferences": {
+      "preferredCity": "Douala",
+      "preferredCategories": [1, 2],
+      "notifications": { "sms": true, "email": false }
+    },
+    "createdAt": "2025-01-15T10:00:00.000Z",
+    "updatedAt": "2025-01-20T14:30:00.000Z"
+  }
+}
+```
+
+#### Response Errors
+
+| Code | Status | Description |
+|------|--------|-------------|
+| `UNAUTHORIZED` | 401 | Token manquant ou invalide |
+| `NOT_FOUND` | 404 | Profil client non trouvé |
+| `VALIDATION_ERROR` | 400 | Données invalides |
+
+#### Exemple cURL
+
+```bash
+curl -X PATCH http://localhost:4000/api/v1/clients/profile \
+  -H "Authorization: Bearer <accessToken>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "firstName": "Marie",
+    "lastName": "Dupont",
+    "preferences": { "preferredCity": "Douala" }
+  }'
+```
+
+---
+
 ## Recherche Providers
 
 Tous les endpoints de recherche sont **publics** (pas d'authentification requise).
@@ -209,6 +345,9 @@ Recherche avec filtres multiples.
 | `minPrice` | number | ❌ | Prix minimum (FCFA) |
 | `maxPrice` | number | ❌ | Prix maximum (FCFA) |
 | `minRating` | number | ❌ | Note minimum (1-5) |
+| `availableNow` | boolean | ❌ | Filtrer les providers disponibles maintenant |
+| `homeService` | boolean | ❌ | Filtrer les providers qui se déplacent à domicile |
+| `isVerified` | boolean | ❌ | Filtrer les providers vérifiés (identité confirmée) |
 | `sortBy` | string | ❌ | Tri: `rating`, `popularity`, `newest` |
 | `page` | number | ❌ | Page (défaut: 1) |
 | `limit` | number | ❌ | Par page (défaut: 10, max: 50) |
@@ -227,6 +366,12 @@ GET /search/providers?categoryId=1&maxPrice=20000
 
 # Tri par popularité
 GET /search/providers?sortBy=popularity&limit=20
+
+# Providers disponibles maintenant et vérifiés
+GET /search/providers?city=Douala&availableNow=true&isVerified=true
+
+# Providers avec service à domicile
+GET /search/providers?city=Douala&homeService=true
 ```
 
 #### Response Success (200)
@@ -261,7 +406,10 @@ GET /search/providers?sortBy=popularity&limit=20
         "coordinates": {
           "latitude": "4.0510564",
           "longitude": "9.7678687"
-        }
+        },
+        "isAvailableNow": true,
+        "homeService": true,
+        "isVerified": true
       }
     ],
     "pagination": {
@@ -626,7 +774,6 @@ Content-Type: application/json
 
 ```json
 {
-  "providerId": 3,
   "serviceId": 12,
   "scheduledAt": "2025-01-20T10:00:00.000Z",
   "notes": "Première visite, cheveux longs"
@@ -635,8 +782,7 @@ Content-Type: application/json
 
 | Champ | Type | Requis | Description |
 |-------|------|--------|-------------|
-| `providerId` | number | ✅ | ID du provider |
-| `serviceId` | number | ✅ | ID du service |
+| `serviceId` | number | ✅ | ID du service (le provider est déduit automatiquement) |
 | `scheduledAt` | string | ✅ | Date/heure ISO 8601 (futur) |
 | `notes` | string | ❌ | Notes pour le provider (max 500 car.) |
 
@@ -681,8 +827,7 @@ Content-Type: application/json
 
 | Code | Status | Description |
 |------|--------|-------------|
-| `PROVIDER_NOT_FOUND` | 404 | Provider inexistant |
-| `SERVICE_NOT_FOUND` | 404 | Service inexistant |
+| `SERVICE_NOT_FOUND` | 404 | Service inexistant ou inactif |
 | `SLOT_NOT_AVAILABLE` | 409 | Créneau non disponible |
 | `PAST_DATE` | 400 | Date dans le passé |
 | `VALIDATION_ERROR` | 400 | Données invalides |
@@ -694,7 +839,6 @@ curl -X POST http://localhost:4000/api/v1/appointments \
   -H "Authorization: Bearer <accessToken>" \
   -H "Content-Type: application/json" \
   -d '{
-    "providerId": 3,
     "serviceId": 12,
     "scheduledAt": "2025-01-20T10:00:00.000Z"
   }'

@@ -41,7 +41,7 @@ export class AppointmentsController {
     description: 'Le client réserve un créneau chez un provider',
   })
   async create(@Req() req: any, @Body() dto: CreateAppointmentDto) {
-    return this.appointmentsService.create(req.user.sub, dto);
+    return this.appointmentsService.create(req.user.userId, dto);
   }
 
   /**
@@ -58,7 +58,7 @@ export class AppointmentsController {
     @Req() req: any,
     @Query() filters: FilterAppointmentsDto,
   ) {
-    return this.appointmentsService.findByClient(req.user.sub, filters);
+    return this.appointmentsService.findByClient(req.user.userId, filters);
   }
 
   /**
@@ -93,7 +93,7 @@ export class AppointmentsController {
   async getOne(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
     return this.appointmentsService.findOne(
       id,
-      req.user.sub,
+      req.user.userId,
       req.user.role,
     );
   }
@@ -116,7 +116,7 @@ export class AppointmentsController {
     return this.appointmentsService.updateStatus(
       id,
       req.user.providerId,
-      req.user.sub,
+      req.user.userId,
       dto,
     );
   }
@@ -138,7 +138,7 @@ export class AppointmentsController {
   ) {
     return this.appointmentsService.cancelByClient(
       id,
-      req.user.sub,
+      req.user.userId,
       reason,
     );
   }
