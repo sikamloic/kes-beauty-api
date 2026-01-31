@@ -1,8 +1,9 @@
 # 📊 Analyse Critique : Système de Paiement & Fonctionnalités
 
-**Date d'analyse :** 10 janvier 2026  
-**Version :** 1.0  
-**Statut :** En cours d'implémentation
+**Date d'analyse :** 31 janvier 2026  
+**Version :** 1.1  
+**Statut :** En cours d'implémentation  
+**Mise à jour :** Alignement délais annulation/report sur standard industrie (24h)
 
 ---
 
@@ -15,22 +16,22 @@
 | **Paiement réservation** | 100% à la réservation |
 | **Preuve de dépôt** | Demandée par l'application après validation |
 | **Facture** | Numéro de réservation/achat généré après validation paiement |
-| **Workflow prestation** | Provider signale début → fin → reçoit paiement |
+| **Workflow prestation** | Client donne code 4 chiffres → Provider démarre → termine → reçoit paiement |
 
 ### Annulation
 
 | Règle | Détail |
 |-------|--------|
-| **Délai gratuit** | > 1h avant le début de la prestation |
-| **Frais si < 1h** | Jusqu'à 50% du montant initial |
-| **No-show** | À définir (prestataire reçoit compensation ?) |
+| **Délai gratuit** | > 24h avant le début de la prestation (standard industrie) |
+| **Frais si < 24h** | Jusqu'à 50% du montant initial |
+| **No-show** | 100% facturé (prestataire reçoit sa part) |
 
 ### Report de Prestation
 
 | Règle | Détail |
 |-------|--------|
-| **Délai gratuit** | > 1h avant le début de la prestation |
-| **Frais si < 1h** | Frais appliqués + réajustement du montant nouvelle réservation |
+| **Délai gratuit** | > 24h avant le début de la prestation (standard industrie) |
+| **Frais si < 24h** | Frais appliqués + réajustement du montant nouvelle réservation |
 
 ### Vente de Produits
 
@@ -68,8 +69,8 @@
 
 | Composant | Problème | Fichier | Ligne |
 |-----------|----------|---------|-------|
-| **Délai annulation** | Hardcodé 24h au lieu de 1h | `appointments.service.ts` | 476 |
-| **Frais annulation** | Aucun calcul, juste refus | `appointments.service.ts` | 477-479 |
+| **Délai annulation** | ✅ Correctement à 24h (standard industrie) | `appointments.service.ts` | 476 |
+| **Frais annulation** | Aucun calcul, juste refus (à implémenter) | `appointments.service.ts` | 477-479 |
 | **depositFcfa** | Champ existe mais = 0, non utilisé | `schema.prisma` | - |
 | **Modèles Prisma paiement** | Absents du schema.prisma | `schema.prisma` | - |
 
@@ -159,13 +160,14 @@ export const BUSINESS_RULES = {
   PAYMENT_PERCENTAGE_AT_BOOKING: 100,  // 100% à la réservation
   PLATFORM_COMMISSION_PERCENTAGE: 10,  // 10% commission plateforme
   
-  // Annulation
-  CANCELLATION_FREE_HOURS: 1,          // Gratuit > 1h avant
-  CANCELLATION_PENALTY_PERCENTAGE: 50, // 50% de pénalité si < 1h
+  // Annulation (standard industrie: 24h)
+  CANCELLATION_FREE_HOURS: 24,         // Gratuit > 24h avant
+  CANCELLATION_PENALTY_PERCENTAGE: 50, // 50% de pénalité si < 24h
+  NO_SHOW_PENALTY_PERCENTAGE: 100,     // 100% si no-show
   
-  // Report
-  RESCHEDULE_FREE_HOURS: 1,            // Gratuit > 1h avant
-  RESCHEDULE_PENALTY_PERCENTAGE: 50,   // 50% si < 1h
+  // Report (aligné sur annulation)
+  RESCHEDULE_FREE_HOURS: 24,           // Gratuit > 24h avant
+  RESCHEDULE_PENALTY_PERCENTAGE: 50,   // 50% si < 24h
   
   // Produits
   PRODUCT_REQUIRES_DOUBLE_VALIDATION: true,
@@ -187,7 +189,7 @@ export const BUSINESS_RULES = {
 |----------|----------|-------------------|
 | **Modèles Prisma incomplets** | 🔴 Critique | Ajouter PaymentMethod, Payment, PaymentGatewayTransaction, PaymentAttempt au schema.prisma |
 | **Pas de gestion produits** | 🔴 Critique | Nouveau module Products avec modèles Product, ProductOrder |
-| **Logique métier hardcodée** | 🟠 Moyenne | Externaliser dans `src/config/business-rules.ts` |
+| **Logique métier hardcodée** | 🟠 Moyenne | Externaliser dans `src/config/business-rules.ts` (délai 24h = standard industrie) |
 | **Pas de génération facture** | 🔴 Critique | Créer InvoiceService avec séquence unique |
 | **Pas de versement provider** | 🔴 Critique | Créer ProviderPayoutService + CRON job |
 
@@ -229,7 +231,7 @@ export const BUSINESS_RULES = {
 
 ### Phase 4 : Règles Métier (Priorité Moyenne)
 - [ ] Créer `src/config/business-rules.ts`
-- [ ] Refactorer `cancelByClient()` avec délai 1h
+- [ ] Refactorer `cancelByClient()` pour calculer frais (délai 24h déjà OK)
 - [ ] Implémenter calcul frais annulation
 - [ ] Créer `RescheduleService` pour reports
 - [ ] Implémenter frais de report
@@ -250,11 +252,11 @@ export const BUSINESS_RULES = {
 
 ## 📝 Questions en Suspens
 
-1. **No-show** : Le prestataire reçoit-il les 50% comme mentionné initialement, ou autre règle ?
+1. ~~**No-show** : Le prestataire reçoit-il les 50% comme mentionné initialement, ou autre règle ?~~ → **Résolu : 100% facturé (standard industrie)**
 2. **Commission plateforme** : Confirmé à 10% ?
 3. **Délai versement provider** : Immédiat après "terminé" ou différé (J+1, J+7) ?
 4. **Credentials API** : Orange Money / MTN MoMo - compte marchand disponible ?
-5. **Frais annulation < 1h** : Exactement 50% ou variable selon délai restant ?
+5. ~~**Frais annulation < 1h** : Exactement 50% ou variable selon délai restant ?~~ → **Résolu : 50% si < 24h (standard industrie)**
 
 ---
 

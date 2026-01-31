@@ -384,8 +384,15 @@ export class AppointmentsService {
         data: { status: dto.status },
       });
 
-      // Si confirmation
+      // Si confirmation → générer code de confirmation
       if (dto.status === AppointmentStatus.CONFIRMED) {
+        const confirmationCode = this.generateConfirmationCode();
+        
+        await tx.appointment.update({
+          where: { id: appointmentId },
+          data: { confirmationCode },
+        });
+
         await tx.appointmentConfirmation.upsert({
           where: { appointmentId },
           create: {
@@ -398,6 +405,9 @@ export class AppointmentsService {
             confirmedAt: new Date(),
           },
         });
+
+        // TODO: Envoyer le code par SMS/notification au client
+        this.logger.log(`Code de confirmation généré pour RDV ${appointmentId}: ${confirmationCode}`);
       }
 
       // Si annulation
@@ -540,5 +550,109 @@ export class AppointmentsService {
         `Transition de statut invalide: ${currentStatus} → ${newStatus}`,
       );
     }
+  }
+
+  /**
+   * Générer un code de confirmation à 4 chiffres
+   */
+  private generateConfirmationCode(): string {
+    return Math.floor(1000 + Math.random() * 9000).toString();
+  }
+
+  /**
+   * Démarrer une prestation avec le code de confirmation
+   * Le provider entre le code donné par le client pour prouver sa présence
+   */
+  async startWithCode(
+    appointmentId: number,
+    providerId: number,
+    code: string,
+  ) {
+    const appointment = await this.prisma.appointment.findFirst({
+      where: {
+        id: appointmentId,
+        providerId,
+      },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException('Rendez-vous non trouvé');
+    }
+
+    if (appointment.status !== 'confirmed') {
+      throw new BadRequestException(
+        'Le rendez-vous doit être confirmé pour démarrer la prestation',
+      );
+    }
+
+    if (!appointment.confirmationCode) {
+      throw new BadRequestException(
+        'Aucun code de confirmation généré pour ce rendez-vous',
+      );
+    }
+
+    if (appointment.confirmationCode !== code) {
+      throw new BadRequestException('Code de confirmation invalide');
+    }
+
+    // Mettre à jour le statut et enregistrer l'heure de début
+    const updated = await this.prisma.appointment.update({
+      where: { id: appointmentId },
+      data: {
+        status: AppointmentStatus.IN_PROGRESS,
+        startedAt: new Date(),
+      },
+    });
+
+    this.logger.log(
+      `Prestation démarrée pour RDV ${appointmentId} avec code valide`,
+    );
+
+    return {
+      id: updated.id,
+      status: updated.status,
+      startedAt: updated.startedAt,
+      message: 'Prestation démarrée avec succès',
+    };
+  }
+
+  /**
+   * Terminer une prestation
+   */
+  async completeAppointment(appointmentId: number, providerId: number) {
+    const appointment = await this.prisma.appointment.findFirst({
+      where: {
+        id: appointmentId,
+        providerId,
+      },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException('Rendez-vous non trouvé');
+    }
+
+    if (appointment.status !== 'in_progress') {
+      throw new BadRequestException(
+        'Le rendez-vous doit être en cours pour être terminé',
+      );
+    }
+
+    const updated = await this.prisma.appointment.update({
+      where: { id: appointmentId },
+      data: {
+        status: AppointmentStatus.COMPLETED,
+        completedAt: new Date(),
+      },
+    });
+
+    this.logger.log(`Prestation terminée pour RDV ${appointmentId}`);
+
+    return {
+      id: updated.id,
+      status: updated.status,
+      startedAt: updated.startedAt,
+      completedAt: updated.completedAt,
+      message: 'Prestation terminée avec succès',
+    };
   }
 }

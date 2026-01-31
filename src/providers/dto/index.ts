@@ -10,4 +10,5 @@ export * from './availability.dto';
 export * from './create-appointment.dto';
 export * from './update-appointment-status.dto';
 export * from './filter-appointments.dto';
+export * from './start-appointment.dto';
 export * from './dashboard.dto';

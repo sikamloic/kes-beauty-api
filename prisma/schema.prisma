@@ -28,13 +28,21 @@ model User {
   deletedAt       DateTime? @map("deleted_at")
 
   // Relations
-  roles                 UserRole[]
-  clientProfile         ClientProfile?
-  providerProfile       ProviderProfile?
-  refreshTokens         RefreshToken[]
-  appointmentsAsClient  Appointment[]             @relation("ClientAppointments")
-  confirmedAppointments AppointmentConfirmation[]
-  cancelledAppointments AppointmentCancellation[]
+  roles                    UserRole[]
+  clientProfile            ClientProfile?
+  providerProfile          ProviderProfile?
+  refreshTokens            RefreshToken[]
+  appointmentsAsClient     Appointment[]             @relation("ClientAppointments")
+  confirmedAppointments    AppointmentConfirmation[]
+  cancelledAppointments    AppointmentCancellation[]
+  clientReputation         ClientReputation?
+  cancellationRequests     CancellationRequest[]     @relation("CancellationRequester")
+  cancellationResponses    CancellationRequest[]     @relation("CancellationResponder")
+  disputesOpened           Dispute[]                 @relation("DisputeOpener")
+  disputesAgainst          Dispute[]                 @relation("DisputeDefendant")
+  disputesResolved         Dispute[]                 @relation("DisputeResolver")
+  reviews                  Review[]
+  favorites                Favorite[]
 
   @@index([phone])
   @@index([email])
@@ -282,6 +290,9 @@ model ProviderProfile {
   statistics             ProviderStatistics?
   registrationDocuments  ProviderRegistrationDocument[]
   appointments           Appointment[]
+  reputation             ProviderReputation?
+  reviews                Review[]
+  favoritedBy            Favorite[]
 
   @@index([userId])
   @@index([businessTypeId])
@@ -389,26 +400,37 @@ model ProviderStatistics {
 }
 
 /// Réservations (ISP)
+/// Statuts: pending, confirmed, reconfirmed, unconfirmed, in_progress, completed, cancelled, cancelled_late, no_show, provider_absent, disputed
 model Appointment {
-  id              Int       @id @default(autoincrement())
-  clientId        Int       @map("client_id")
-  providerId      Int       @map("provider_id")
-  serviceId       Int       @map("service_id")
-  scheduledAt     DateTime  @map("scheduled_at") @db.Timestamp(0)
-  durationMinutes Int       @map("duration_minutes")
-  endAt           DateTime? @map("end_at") @db.Timestamp(0)
-  status          String    @default("pending") @db.VarChar(50) // pending, confirmed, in_progress, completed, cancelled, no_show
-  priceFcfa       Int       @map("price_fcfa")
-  depositFcfa     Int       @default(0) @map("deposit_fcfa")
-  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
-  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamp(0)
+  id                  Int       @id @default(autoincrement())
+  clientId            Int       @map("client_id")
+  providerId          Int       @map("provider_id")
+  serviceId           Int       @map("service_id")
+  scheduledAt         DateTime  @map("scheduled_at") @db.Timestamp(0)
+  durationMinutes     Int       @map("duration_minutes")
+  endAt               DateTime? @map("end_at") @db.Timestamp(0)
+  status              String    @default("pending") @db.VarChar(50)
+  priceFcfa           Int       @map("price_fcfa")
+  depositFcfa         Int       @default(0) @map("deposit_fcfa")
+  confirmationCode    String?   @map("confirmation_code") @db.VarChar(6)
+  reconfirmedAt       DateTime? @map("reconfirmed_at") @db.Timestamp(0)
+  clientArrivedAt     DateTime? @map("client_arrived_at") @db.Timestamp(0)
+  clientLateMinutes   Int?      @map("client_late_minutes")
+  providerLateMinutes Int?      @map("provider_late_minutes")
+  startedAt           DateTime? @map("started_at") @db.Timestamp(0)
+  completedAt         DateTime? @map("completed_at") @db.Timestamp(0)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamp(0)
 
   // Relations
-  client       User                     @relation("ClientAppointments", fields: [clientId], references: [id], onDelete: Restrict)
-  provider     ProviderProfile          @relation(fields: [providerId], references: [id], onDelete: Restrict)
-  service      Service                  @relation(fields: [serviceId], references: [id], onDelete: Restrict)
-  confirmation AppointmentConfirmation?
-  cancellation AppointmentCancellation?
+  client              User                     @relation("ClientAppointments", fields: [clientId], references: [id], onDelete: Restrict)
+  provider            ProviderProfile          @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  service             Service                  @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  confirmation        AppointmentConfirmation?
+  cancellation        AppointmentCancellation?
+  cancellationRequest CancellationRequest?
+  disputes            Dispute[]
+  review              Review?
 
   @@unique([providerId, scheduledAt], name: "unique_provider_slot")
   @@index([clientId, status])
@@ -444,4 +466,142 @@ model AppointmentCancellation {
   cancelledBy User        @relation(fields: [cancelledByUserId], references: [id], onDelete: Restrict)
 
   @@map("appointment_cancellations")
+}
+
+/// Score de réputation client
+model ClientReputation {
+  id                 Int       @id @default(autoincrement())
+  clientId           Int       @unique @map("client_id")
+  score              Int       @default(50)
+  totalAppointments  Int       @default(0) @map("total_appointments")
+  completedCount     Int       @default(0) @map("completed_count")
+  noShowCount        Int       @default(0) @map("no_show_count")
+  lateCount          Int       @default(0) @map("late_count")
+  cancelledLateCount Int       @default(0) @map("cancelled_late_count")
+  disputesWonCount   Int       @default(0) @map("disputes_won_count")
+  disputesLostCount  Int       @default(0) @map("disputes_lost_count")
+  isSuspended        Boolean   @default(false) @map("is_suspended")
+  suspendedUntil     DateTime? @map("suspended_until")
+  suspensionReason   String?   @map("suspension_reason") @db.Text
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  client User @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("client_reputations")
+}
+
+/// Score de réputation provider
+model ProviderReputation {
+  id                 Int       @id @default(autoincrement())
+  providerId         Int       @unique @map("provider_id")
+  score              Int       @default(50)
+  totalAppointments  Int       @default(0) @map("total_appointments")
+  completedCount     Int       @default(0) @map("completed_count")
+  noShowCount        Int       @default(0) @map("no_show_count")
+  absentCount        Int       @default(0) @map("absent_count")
+  lateCount          Int       @default(0) @map("late_count")
+  cancelledLateCount Int       @default(0) @map("cancelled_late_count")
+  disputesWonCount   Int       @default(0) @map("disputes_won_count")
+  disputesLostCount  Int       @default(0) @map("disputes_lost_count")
+  isSuspended        Boolean   @default(false) @map("is_suspended")
+  suspendedUntil     DateTime? @map("suspended_until")
+  suspensionReason   String?   @map("suspension_reason") @db.Text
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  provider ProviderProfile @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@map("provider_reputations")
+}
+
+/// Demande d'annulation exceptionnelle (< 24h)
+model CancellationRequest {
+  id                Int       @id @default(autoincrement())
+  appointmentId     Int       @unique @map("appointment_id")
+  requestedByUserId Int       @map("requested_by_user_id")
+  requestedByRole   String    @map("requested_by_role") @db.VarChar(20) // client, provider
+  reasonType        String    @map("reason_type") @db.VarChar(50) // medical, family, professional, technical, other
+  reasonText        String?   @map("reason_text") @db.Text
+  proofUrl          String?   @map("proof_url") @db.VarChar(500)
+  status            String    @default("pending") @db.VarChar(20) // pending, accepted, rejected, expired
+  respondedByUserId Int?      @map("responded_by_user_id")
+  respondedAt       DateTime? @map("responded_at")
+  responseNote      String?   @map("response_note") @db.Text
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  requestedBy User        @relation("CancellationRequester", fields: [requestedByUserId], references: [id])
+  respondedBy User?       @relation("CancellationResponder", fields: [respondedByUserId], references: [id])
+
+  @@map("cancellation_requests")
+}
+
+/// Litige entre client et provider
+model Dispute {
+  id                Int       @id @default(autoincrement())
+  appointmentId     Int       @map("appointment_id")
+  openedByUserId    Int       @map("opened_by_user_id")
+  againstUserId     Int       @map("against_user_id")
+  type              String    @db.VarChar(50) // no_show_contested, provider_absent_contested, quality_issue, partial_service, late_cancellation_rejected, other
+  description       String    @db.Text
+  proofUrls         Json?     @map("proof_urls")
+  status            String    @default("open") @db.VarChar(20) // open, responded, escalated, resolved, closed
+  responseText      String?   @map("response_text") @db.Text
+  respondedAt       DateTime? @map("responded_at")
+  resolvedByAdminId Int?      @map("resolved_by_admin_id")
+  resolution        String?   @db.VarChar(50) // in_favor_of_opener, in_favor_of_respondent, mutual_fault, dismissed
+  resolutionNote    String?   @map("resolution_note") @db.Text
+  resolvedAt        DateTime? @map("resolved_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  appointment     Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  openedBy        User        @relation("DisputeOpener", fields: [openedByUserId], references: [id])
+  againstUser     User        @relation("DisputeDefendant", fields: [againstUserId], references: [id])
+  resolvedByAdmin User?       @relation("DisputeResolver", fields: [resolvedByAdminId], references: [id])
+
+  @@index([appointmentId])
+  @@index([status])
+  @@map("disputes")
+}
+
+/// Avis client sur provider
+model Review {
+  id               Int       @id @default(autoincrement())
+  appointmentId    Int       @unique @map("appointment_id")
+  clientId         Int       @map("client_id")
+  providerId       Int       @map("provider_id")
+  rating           Int       // 1-5
+  comment          String?   @db.Text
+  providerResponse String?   @map("provider_response") @db.Text
+  respondedAt      DateTime? @map("responded_at")
+  isVisible        Boolean   @default(false) @map("is_visible")
+  isReported       Boolean   @default(false) @map("is_reported")
+  reportReason     String?   @map("report_reason") @db.Text
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  appointment Appointment     @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  client      User            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  provider    ProviderProfile @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId, isVisible])
+  @@index([clientId])
+  @@map("reviews")
+}
+
+/// Favoris client
+model Favorite {
+  id         Int      @id @default(autoincrement())
+  clientId   Int      @map("client_id")
+  providerId Int      @map("provider_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  client   User            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  provider ProviderProfile @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, providerId])
+  @@map("favorites")
 }

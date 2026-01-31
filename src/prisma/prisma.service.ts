@@ -138,6 +138,30 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.appointmentCancellation;
   }
 
+  get clientReputation() {
+    return this.prisma.clientReputation;
+  }
+
+  get providerReputation() {
+    return this.prisma.providerReputation;
+  }
+
+  get cancellationRequest() {
+    return this.prisma.cancellationRequest;
+  }
+
+  get dispute() {
+    return this.prisma.dispute;
+  }
+
+  get review() {
+    return this.prisma.review;
+  }
+
+  get favorite() {
+    return this.prisma.favorite;
+  }
+
   // Expose utility methods
   get $transaction() {
     return this.prisma.$transaction.bind(this.prisma);

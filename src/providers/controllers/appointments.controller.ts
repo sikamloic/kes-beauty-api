@@ -16,6 +16,7 @@ import {
   CreateAppointmentDto,
   UpdateAppointmentStatusDto,
   FilterAppointmentsDto,
+  StartAppointmentDto,
 } from '../dto';
 import { JwtAuthGuard, Roles, RolesGuard } from '../../common';
 
@@ -140,6 +141,48 @@ export class AppointmentsController {
       id,
       req.user.userId,
       reason,
+    );
+  }
+
+  /**
+   * POST /appointments/:id/start
+   * Démarrer une prestation avec le code de confirmation (PROVIDER)
+   */
+  @Post(':id/start')
+  @Roles('provider')
+  @ApiOperation({
+    summary: 'Démarrer une prestation',
+    description: 'Le provider entre le code à 4 chiffres donné par le client pour démarrer la prestation',
+  })
+  async startWithCode(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() req: any,
+    @Body() dto: StartAppointmentDto,
+  ) {
+    return this.appointmentsService.startWithCode(
+      id,
+      req.user.providerId,
+      dto.code,
+    );
+  }
+
+  /**
+   * POST /appointments/:id/complete
+   * Terminer une prestation (PROVIDER)
+   */
+  @Post(':id/complete')
+  @Roles('provider')
+  @ApiOperation({
+    summary: 'Terminer une prestation',
+    description: 'Le provider signale la fin de la prestation',
+  })
+  async complete(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() req: any,
+  ) {
+    return this.appointmentsService.completeAppointment(
+      id,
+      req.user.providerId,
     );
   }
 }
